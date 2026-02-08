@@ -1,0 +1,43 @@
+name: Java CI/CD with Docker Compose
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+    # Мы не описываем сервисы здесь, так как будем использовать твой docker-compose
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Start Infrastructure (Postgres, Redis, Kafka)
+        run: docker-compose up -d trains-postgres trains-redis trains-kafka
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests # Сначала собираем JAR
+
+      - name: Run Tests
+        run: mvn test # Запускаем тесты, когда контейнеры уже подняты
+        env:
+          # Переопределяем хосты для тестов, если они запускаются не в Docker-сети
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5444/trains_db
+          SPRING_DATA_REDIS_PORT: 6399
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9095
+
+      - name: Stop Infrastructure
+        if: always()
+        run: docker-compose down
