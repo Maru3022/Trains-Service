@@ -16,5 +16,6 @@ public class Train {
     private Long id;
 
     private String name;
-    private String model;
+    private String category;
+    private Integer durationMinutes;
 }
