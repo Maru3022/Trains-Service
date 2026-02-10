@@ -1,11 +1,13 @@
+version: '3.8'
+
 services:
-  # --- ПРИЛОЖЕНИЕ ---
   app:
     build: .
     container_name: trains-app
     ports:
-      - "8089:8080"
+      - "8009:8080"
     environment:
+      - SERVER_PORT=8009
       - SPRING_DATASOURCE_URL=jdbc:postgresql://trains-postgres:5432/trains_db
       - SPRING_DATA_REDIS_HOST=trains-redis
       - SPRING_DATA_REDIS_PORT=6379
@@ -18,23 +20,22 @@ services:
       trains-kafka:
         condition: service_started
 
-  # --- ИНФРАСТРУКТУРА ---
   trains-postgres:
     image: 'postgres:latest'
     container_name: trains-postgres
     environment:
-      - 'POSTGRES_DB=trains_db'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=trains_user'
+      - POSTGRES_DB=trains_db
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_USER=trains_user
     ports:
       - '5444:5432'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trains_user -d trains_db"]
+      test: [ "CMD-SHELL", "pg_isready -U trains_user -d trains_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
     volumes:
-      # Путь изменен для совместимости с Postgres 18+
+      # ВАЖНО: Убираем /data в конце пути для совместимости с 18+
       - trains_postgres_data:/var/lib/postgresql
 
   trains-redis:
@@ -66,7 +67,6 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_ENABLE_KRAFT: 'false'
 
 volumes:
   trains_postgres_data:
