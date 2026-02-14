@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @EnableKafka
-@Configuration
+//@Configuration
 public class ConsumerFactoryConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")

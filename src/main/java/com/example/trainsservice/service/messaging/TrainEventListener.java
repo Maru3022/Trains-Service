@@ -4,7 +4,7 @@ import com.example.trainsservice.dto.TrainEventDTO;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
-@Service
+//@Service
 public class TrainEventListener {
     @KafkaListener(topics = "trains-events", groupId = "trains-group")
     public void consume(TrainEventDTO event){

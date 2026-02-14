@@ -4,7 +4,7 @@ import com.example.trainsservice.dto.TrainEventDTO;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-@Service
+//@Service
 public class TrainEventProducer {
 
     private final KafkaTemplate<?, ?> kafkaTemplate;
