@@ -11,7 +11,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
-@EmbeddedKafka(partitions = 1) // Просто оставляем партиции, Spring сам настроит порты
+@EmbeddedKafka(partitions = 1)
 @DirtiesContext
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
