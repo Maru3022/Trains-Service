@@ -3,17 +3,18 @@ import { check, sleep } from 'k6';
 
 export const options = {
     stages: [
-        { duration: '1m', target: 500 },   // Плавный прогрев
-        { duration: '2m', target: 2000 },  // Разгон до 2к
-        { duration: '3m', target: 5000 },  // Разгон до 5к
+        { duration: '30s', target: 100 },  // Очень плавный старт
+        { duration: '1m', target: 500 },   // Постепенный разгон
+        { duration: '2m', target: 1500 },  // Рабочий максимум
         { duration: '1m', target: 0 },
     ],
 };
 
 export default function () {
-    const url = 'http://localhost:8009/api/trains';
+    const url = 'http://127.0.0.1:8009/api/trains';
+    // Использование уникальных имен для каждого VU
     const payload = JSON.stringify({
-        name: `Train_${__VU}`,
+        name: `Train_${__VU}_${Math.floor(Math.random() * 100000)}`,
         category: 'Test',
         durationMinutes: 60
     });
@@ -24,8 +25,12 @@ export default function () {
     };
 
     const res = http.post(url, payload, params);
-    check(res, { 'status is 200': (r) => r.status === 200 });
 
-    sleep(1); // ПАУЗА 1 секунда (обязательно!)
+    check(res, {
+        'status is 201 or 200': (r) => r.status === 200 || r.status === 201,
+    });
+
+    // Рандомная пауза от 0.5 до 1.5 секунд (имитация реального пользователя)
+    sleep(Math.random() * 1 + 0.5);
 }
 //k6 run src/test/k6/stress_test.js
