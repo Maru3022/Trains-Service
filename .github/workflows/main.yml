@@ -217,6 +217,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: 🚀 Set up Docker Buildx
@@ -236,13 +237,17 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
 
+      # Сканируем ровно тот манифест, что только что запушен (тег sha-<full> раньше не существовал — был только short)
       - name: 🔍 Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-push.outputs.digest }}
           format: 'table'
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
+          scanners: vuln
+        env:
+          TRIVY_DISABLE_VEX_NOTICE: 'true'
 
       - name: 📤 Upload Trivy scan results
         uses: actions/upload-artifact@v7
