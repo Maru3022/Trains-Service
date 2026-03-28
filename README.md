@@ -2,6 +2,8 @@
 
 **Trains-Service** — это бэкенд-система на Java Spring Boot для управления данными о поездах (или тренировках) и мониторинга прогресса в реальном времени. Проект сочетает в себе классический REST API и современную событийную архитектуру на базе Apache Kafka.
 
+---
+
 ## 🌟 Основные возможности
 
 ### 🛠 Управление данными (CRUD)
@@ -24,12 +26,15 @@
 
 ## 🏗 Технологический стек
 
-* **Ядро**: Java 21 & Spring Boot 3.4.2.
-* **База данных**: PostgreSQL (хранение поездов и прогресса).
-* **Кэширование**: Redis (поддержка реактивности).
-* **Сообщения**: Apache Kafka (порт 9095).
-* **Документация**: Swagger UI (OpenAPI 2.8.4).
-* **Инструменты**: Lombok (чистота кода), Maven (сборка).
+| Компонент | Технология |
+| :--- | :--- |
+| **Ядро** | Java 21 & Spring Boot 3.4.2 |
+| **База данных** | PostgreSQL (порт `5444`) |
+| **Кэширование** | Redis |
+| **Сообщения** | Apache Kafka (порт `9095`) |
+| **Документация** | Swagger UI (OpenAPI 2.8.4) |
+| **Мониторинг** | Prometheus + Grafana |
+| **Инструменты** | Lombok, Maven |
 
 ---
 
@@ -50,13 +55,164 @@
 
 ---
 
+## 📊 Мониторинг (Prometheus + Grafana)
+
+Проект включает полноценный стек мониторинга, разворачиваемый отдельным `docker-compose` файлом.
+
+### Архитектура мониторинга
+
+```
+┌─────────────────┐     scrape      ┌────────────────┐     query      ┌─────────────┐
+│  trains-app     │ ◄────────────── │   Prometheus   │ ◄──────────── │   Grafana   │
+│  :8080/actuator │                 │   :9090        │                │   :3000     │
+├─────────────────┤                 └────────────────┘                └─────────────┘
+│  api-gateway    │ ◄──────────────
+│  :8075/actuator │
+└─────────────────┘
+```
+
+### Структура файлов
+
+```
+monitoring/
+├── docker-compose.monitoring.yml         # Запуск Prometheus + Grafana
+├── prometheus/
+│   └── prometheus.yml                    # Конфигурация сбора метрик
+└── grafana/
+    └── provisioning/
+        ├── datasources/
+        │   └── datasource.yml            # Авто-подключение Prometheus
+        └── dashboards/
+            └── dashboards.yml            # Авто-загрузка дашбордов
+```
+
+### Конфигурация Prometheus (`prometheus.yml`)
+
+Prometheus собирает метрики с двух сервисов каждые **15 секунд** через Spring Boot Actuator:
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['api-gateway:8075']
+
+  - job_name: 'trains-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['trains-app:8080']
+```
+
+> **Важно**: Для работы эндпоинта `/actuator/prometheus` в `application.yml` должно быть включено:
+> ```yaml
+> management:
+>   endpoints:
+>     web:
+>       exposure:
+>         include: prometheus, health, info, metrics
+>   metrics:
+>     export:
+>       prometheus:
+>         enabled: true
+> ```
+
+### Конфигурация Grafana
+
+Grafana настраивается **автоматически** при старте через механизм provisioning — вручную ничего добавлять не нужно.
+
+**Datasource** (`datasource.yml`): автоматически подключает Prometheus как источник данных по умолчанию.
+
+**Dashboards** (`dashboards.yml`): Grafana читает JSON-файлы дашбордов из директории `/var/lib/grafana/dashboards`.
+
+Чтобы добавить собственный дашборд:
+1. Создайте дашборд в Grafana UI.
+2. Экспортируйте его: `Dashboard → Share → Export → Save to file`.
+3. Поместите JSON-файл в `monitoring/grafana/provisioning/dashboards/`.
+4. Перезапустите контейнер Grafana — дашборд появится автоматически.
+
+### Доступ к интерфейсам
+
+| Сервис | URL | Логин / Пароль |
+| :--- | :--- | :--- |
+| **Grafana** | http://localhost:3000 | `admin` / `admin` |
+| **Prometheus** | http://localhost:9090 | — |
+| **Actuator (trains)** | http://localhost:8080/actuator | — |
+| **Actuator (gateway)** | http://localhost:8075/actuator | — |
+
+### Запуск стека мониторинга
+
+```bash
+# Запуск только мониторинга (Prometheus + Grafana)
+docker compose -f monitoring/docker-compose.monitoring.yml up -d
+
+# Запуск всего проекта + мониторинг
+docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
+
+# Просмотр логов
+docker compose -f monitoring/docker-compose.monitoring.yml logs -f
+
+# Остановка
+docker compose -f monitoring/docker-compose.monitoring.yml down
+```
+
+### Ключевые метрики для мониторинга
+
+| Метрика | Описание |
+| :--- | :--- |
+| `http_server_requests_seconds` | Латентность HTTP-запросов по эндпоинтам |
+| `jvm_memory_used_bytes` | Потребление памяти JVM |
+| `hikaricp_connections_active` | Активные соединения с БД (connection pool) |
+| `kafka_producer_record_send_total` | Количество отправленных сообщений в Kafka |
+| `process_cpu_usage` | Загрузка CPU приложением |
+
+---
+
 ## 🔧 Настройка и запуск
 
 ### 1. Предварительные требования
+* Docker & Docker Compose
 * **PostgreSQL**: база данных `trains_db` на порту `5444`.
 * **Kafka**: брокер доступен на `localhost:9095`.
 
 ### 2. Сборка проекта
 В корневой папке выполните:
+
 ```bash
 mvn clean install
+```
+
+### 3. Запуск через Docker Compose
+
+```bash
+# Поднять все сервисы
+docker compose up -d
+
+# Поднять с мониторингом
+docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
+```
+
+---
+
+## 📁 Структура проекта
+
+```
+Trains-Service/
+├── src/
+│   └── main/java/...
+├── monitoring/
+│   ├── docker-compose.monitoring.yml
+│   ├── prometheus/
+│   │   └── prometheus.yml
+│   └── grafana/
+│       └── provisioning/
+│           ├── datasources/datasource.yml
+│           └── dashboards/dashboards.yml
+├── .github/
+│   └── workflows/
+│       └── main.yml
+├── docker-compose.yml
+└── pom.xml
+```
