@@ -266,7 +266,11 @@ jobs:
     name: 🧪 Deploy to Staging
     runs-on: ubuntu-latest
     needs: docker-build-push
-    if: github.ref == 'refs/heads/develop' && secrets.STAGING_SSH_KEY != '' && secrets.STAGING_HOST != '' && secrets.STAGING_USER != ''
+    if: github.ref == 'refs/heads/develop'
+    env:
+      STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
+      STAGING_USER: ${{ secrets.STAGING_USER }}
     permissions:
       contents: read
       packages: read
@@ -281,12 +285,18 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
+      - name: Skip staging deploy (no secrets)
+        if: ${{ env.STAGING_SSH_KEY == '' || env.STAGING_HOST == '' || env.STAGING_USER == '' }}
+        run: echo "Skipping staging deploy (secrets not configured)." && exit 0
+
       - name: 🔑 Set up SSH key
+        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
 
       - name: 🚀 Deploy to Staging server
+        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
             cd /opt/trains-service
@@ -306,6 +316,7 @@ jobs:
           EOF
 
       - name: ✅ Health Check — Staging
+        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
         run: |
           echo "Waiting for service to start..."
           sleep 20
@@ -325,16 +336,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-staging
     if: github.ref == 'refs/heads/develop'
+    env:
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
     permissions:
       contents: read
       checks: write
       pull-requests: write
 
     steps:
+      - name: Skip integration tests (no staging host)
+        if: ${{ env.STAGING_HOST == '' }}
+        run: echo "Skipping integration tests (STAGING_HOST not configured)." && exit 0
+
       - name: 📥 Checkout code
+        if: ${{ env.STAGING_HOST != '' }}
         uses: actions/checkout@v6
 
       - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        if: ${{ env.STAGING_HOST != '' }}
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
@@ -342,13 +361,14 @@ jobs:
           cache: maven
 
       - name: 🔗 Run Integration Tests
+        if: ${{ env.STAGING_HOST != '' }}
         run: mvn -B verify -Pintegration-tests
         env:
           APP_BASE_URL: http://${{ secrets.STAGING_HOST }}:8080
 
       - name: 📊 Publish Integration Test Results
+        if: ${{ always() && env.STAGING_HOST != '' }}
         uses: EnricoMi/publish-unit-test-result-action@v2.23.0
-        if: always()
         continue-on-error: true
         with:
           files: target/failsafe-reports/*.xml
@@ -363,7 +383,11 @@ jobs:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
-    if: github.ref == 'refs/heads/main' && secrets.PROD_SSH_KEY != '' && secrets.PROD_HOST != '' && secrets.PROD_USER != ''
+    if: github.ref == 'refs/heads/main'
+    env:
+      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_USER: ${{ secrets.PROD_USER }}
     permissions:
       contents: write
       packages: read
@@ -378,17 +402,24 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
+      - name: Skip production deploy (no secrets)
+        if: ${{ env.PROD_SSH_KEY == '' || env.PROD_HOST == '' || env.PROD_USER == '' }}
+        run: echo "Skipping production deploy (secrets not configured)." && exit 0
+
       - name: 🔑 Set up SSH key
+        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
       - name: 🗄️ Backup database before deploy
+        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
             "pg_dump -U postgres trains_db > /backups/trains_db_$(date +%Y%m%d_%H%M%S).sql"
 
       - name: 🚀 Deploy to Production (zero-downtime)
+        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
             set -e
@@ -416,6 +447,7 @@ jobs:
           EOF
 
       - name: ✅ Health Check — Production
+        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
         run: |
           echo "Waiting for service to start..."
           sleep 30
@@ -433,7 +465,7 @@ jobs:
           exit 1
 
       - name: 🏷️ Tag Git release
-        if: success()
+        if: ${{ success() && env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -453,10 +485,12 @@ jobs:
     if: always()
     permissions:
       contents: read
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: 🟢 Notify on Success
-        if: ${{ (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success') && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success') && env.SLACK_WEBHOOK_URL != '' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v3.0.1
         with:
@@ -478,7 +512,7 @@ jobs:
             }
 
       - name: 🔴 Notify on Failure
-        if: ${{ (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure') && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure') && env.SLACK_WEBHOOK_URL != '' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v3.0.1
         with:
