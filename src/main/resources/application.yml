@@ -1,11 +1,12 @@
 spring:
   application:
     name: TRAINS-SERVICE
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   datasource:
     url: jdbc:postgresql://localhost:5444/trains_db
     username: trains_user
     password: secret
-    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 50
       minimum-idle: 10
