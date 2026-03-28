@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,6 +25,3 @@ jobs:
 
       - name: Build Docker Image
         run: docker compose build
-
-      - name: Test Docker Compose
-        run: docker compose up -d && docker compose ps

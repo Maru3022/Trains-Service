@@ -1,6 +1,28 @@
 spring:
   application:
     name: TRAINS-SERVICE
+  datasource:
+    url: jdbc:postgresql://localhost:5444/trains_db
+    username: trains_user
+    password: secret
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8035
+  address: 0.0.0.0
 
 eureka:
   client:
@@ -10,3 +32,19 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   instance:
     prefer-ip-address: true
+
+logging:
+  level:
+    root: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  observations:
+    key-values:
+      application: trains-service
