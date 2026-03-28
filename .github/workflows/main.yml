@@ -13,6 +13,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
+  # Должно совпадать с реальным пушем в GHCR (только lowercase). Переопределяется первым шагом в docker/deploy.
   IMAGE_NAME: ${{ github.repository }}/trains-service
   JAVA_VERSION: '21'
 
@@ -188,6 +189,10 @@ jobs:
       image-digest: ${{ steps.build-push.outputs.digest }}
 
     steps:
+      # GHCR и парсеры вроде Trivy требуют lowercase в пути образа (Maru3022/Trains-Service → maru3022/trains-service)
+      - name: Normalise GHCR image name (lowercase)
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
+
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
@@ -263,6 +268,9 @@ jobs:
       url: http://staging.trains-service.example.com
 
     steps:
+      - name: Normalise GHCR image name (lowercase)
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
+
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
@@ -356,6 +364,9 @@ jobs:
       url: http://trains-service.example.com
 
     steps:
+      - name: Normalise GHCR image name (lowercase)
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
+
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
