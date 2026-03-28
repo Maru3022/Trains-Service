@@ -25,8 +25,10 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.data.redis.repositories.enabled=false",
-        "spring.data.redis.host=none"
+        "spring.data.redis.host=none",
+        "spring.autoconfigure.exclude="
 })
 public class TrainMessagingTest {
 
@@ -34,7 +36,7 @@ public class TrainMessagingTest {
     private TrainEventProducer producer;
 
     @Test
-    void testSendEvent(){
+    void testSendEvent() {
         TrainEventDTO event = new TrainEventDTO("train-123", "DEPARTED");
         producer.sendEvent(event);
     }
