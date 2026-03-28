@@ -149,7 +149,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           set +e
-          mvn -B org.owasp:dependency-check-maven:11.1.2:check \
+          mvn -B org.owasp:dependency-check-maven:12.1.2:check \
             -DfailBuildOnCVSS=11 \
             -Dformats=HTML,JSON \
             -DretireJsAnalyzerEnabled=false
