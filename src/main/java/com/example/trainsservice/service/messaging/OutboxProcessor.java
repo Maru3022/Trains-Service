@@ -18,7 +18,7 @@ import java.util.List;
 public class OutboxProcessor {
 
     private final OutboxEventRepository outboxEventRepository;
-    private final KafkaTemplate<String, String> stringKafkaTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
 
     @Scheduled(fixedDelay = 5000)
     @Transactional
@@ -27,25 +27,24 @@ public class OutboxProcessor {
             List<OutboxEvent> pendingEvents = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
 
             if (pendingEvents.isEmpty()) {
-                log.debug("No pending events to process");
                 return;
             }
 
             for (OutboxEvent event : pendingEvents) {
                 try {
-                    stringKafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
+                    kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
                     event.setStatus(OutboxEvent.Status.SENT);
                     event.setProcessedAt(LocalDateTime.now());
                     outboxEventRepository.save(event);
-                    log.info("Sent event to Kafka: {}", event.getId());
+                    log.info("Sent event: {}", event.getId());
                 } catch (Exception e) {
-                    log.error("Failed to send event {}: {}", event.getId(), e.getMessage());
+                    log.error("Error sending event {}: {}", event.getId(), e.getMessage());
                     event.setStatus(OutboxEvent.Status.FAILED);
                     outboxEventRepository.save(event);
                 }
             }
         } catch (Exception e) {
-            log.error("Error in outbox processor: {}", e.getMessage(), e);
+            log.error("Error in outbox processor", e);
         }
     }
 }

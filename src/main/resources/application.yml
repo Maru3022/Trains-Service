@@ -3,9 +3,6 @@ spring:
     name: TRAINS-SERVICE
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
   datasource:
     url: jdbc:postgresql://localhost:5444/trains_db
     username: trains_user
@@ -41,7 +38,6 @@ eureka:
 logging:
   level:
     root: INFO
-    com.example.trainsservice: DEBUG
 
 management:
   endpoints:
