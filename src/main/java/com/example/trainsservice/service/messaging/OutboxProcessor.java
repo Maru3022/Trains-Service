@@ -4,6 +4,7 @@ import com.example.trainsservice.model.OutboxEvent;
 import com.example.trainsservice.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -15,12 +16,13 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@ConditionalOnProperty(name = "spring.task.scheduling.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxProcessor {
 
     private final OutboxEventRepository outboxEventRepository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final KafkaTemplate<String, String> stringKafkaTemplate;
 
-    @Scheduled(fixedDelay = 5000) // Process every 5 seconds
+    @Scheduled(fixedDelay = 5000)
     @Transactional
     public void processOutbox() {
         try {
@@ -33,7 +35,7 @@ public class OutboxProcessor {
 
             for (OutboxEvent event : pendingEvents) {
                 try {
-                    kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
+                    stringKafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
                     event.setStatus(OutboxEvent.Status.SENT);
                     event.setProcessedAt(LocalDateTime.now());
                     outboxEventRepository.save(event);
