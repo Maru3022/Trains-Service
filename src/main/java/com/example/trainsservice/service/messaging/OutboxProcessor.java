@@ -4,6 +4,7 @@ import com.example.trainsservice.model.OutboxEvent;
 import com.example.trainsservice.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -19,10 +20,16 @@ public class OutboxProcessor {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    
+    @Value("${spring.task.scheduling.enabled:true}")
+    private boolean schedulingEnabled;
 
     @Scheduled(fixedDelay = 5000)
     @Transactional
     public void processOutbox() {
+        if (!schedulingEnabled) {
+            return;
+        }
         try {
             List<OutboxEvent> pendingEvents = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
 

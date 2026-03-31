@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password: ""
     driver-class-name: org.h2.Driver
@@ -8,6 +8,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
   task:
     scheduling:
       enabled: false
@@ -17,9 +18,16 @@ spring:
       group-id: test-group
     listener:
       auto-startup: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 eureka:
   client:
     enabled: false
+  instance:
+    prefer-ip-address: true
 logging:
   level:
     root: WARN
+    org.hibernate: WARN
+    org.springframework: WARN
