@@ -31,31 +31,6 @@ jobs:
       checks: write
       pull-requests: write
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: trains_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5444:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
@@ -79,13 +54,8 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: 🧪 Run Unit Tests
-        run: mvn test -Dspring.profiles.active=test
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5444/trains_db
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-          SPRING_REDIS_HOST: localhost
-          SPRING_REDIS_PORT: 6379
+        run: mvn clean test -Dspring.profiles.active=test
+
 
       - name: 📊 Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.23.0

@@ -23,12 +23,18 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   data:
     redis:
+      enabled: false
+      repositories:
+        enabled: false
       connect-timeout: 10ms
 eureka:
   client:
     enabled: false
   instance:
     prefer-ip-address: true
+cloud:
+  config:
+    enabled: false
 logging:
   level:
     root: WARN
