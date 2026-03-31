@@ -1,19 +1,32 @@
 package com.example.trainsservice.service.messaging;
 
 import com.example.trainsservice.dto.TrainEventDTO;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.example.trainsservice.model.OutboxEvent;
+import com.example.trainsservice.repository.OutboxEventRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class TrainEventProducer {
 
-    private final KafkaTemplate<?, ?> kafkaTemplate;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
 
-    public TrainEventProducer(KafkaTemplate<?, ?> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
-    }
-
+    @Transactional
     public void sendEvent(TrainEventDTO event) {
-        ((KafkaTemplate<String, Object>) kafkaTemplate).send("train-events", event.getTrainId(), event);
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+            OutboxEvent outboxEvent = new OutboxEvent();
+            outboxEvent.setTopic("train-events");
+            outboxEvent.setKey(event.getTrainId());
+            outboxEvent.setPayload(payload);
+            outboxEventRepository.save(outboxEvent);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize event", e);
+        }
     }
 }
