@@ -20,3 +20,11 @@ spring:
     redis:
       repositories:
         enabled: false
+
+  task:
+    scheduling:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
