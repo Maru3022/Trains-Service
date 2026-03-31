@@ -8,7 +8,8 @@
       "Bash(mvn *)",
       "Bash(.\\mvnw.cmd *)",
       "Bash(findstr *)",
-      "WebFetch(raw.githubusercontent.com)"
+      "WebFetch(raw.githubusercontent.com)",
+      "Bash(git ls-remote *)"
     ]
   },
   "$version": 3
