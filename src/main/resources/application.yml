@@ -6,7 +6,6 @@ spring:
     producer:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-    enabled: true
   datasource:
     url: jdbc:postgresql://localhost:5444/trains_db
     username: trains_user

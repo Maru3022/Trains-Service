@@ -4,7 +4,6 @@ import com.example.trainsservice.dto.TrainEventDTO;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -22,7 +21,6 @@ public class ProducerFactoryConfig {
     private String bootstrapServers;
 
     @Bean
-    @ConditionalOnProperty(name = "spring.kafka.enabled", havingValue = "true", matchIfMissing = true)
     public ProducerFactory<String, TrainEventDTO> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -34,7 +32,6 @@ public class ProducerFactoryConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "spring.kafka.enabled", havingValue = "true", matchIfMissing = true)
     public KafkaTemplate<String, TrainEventDTO> kafkaTemplate(ProducerFactory<String, TrainEventDTO> producerFactory) {
         return new KafkaTemplate<>(producerFactory);
     }

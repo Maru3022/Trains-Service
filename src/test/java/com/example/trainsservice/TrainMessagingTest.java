@@ -28,21 +28,15 @@ public class TrainMessagingTest {
     @Transactional
     void testSendEvent() {
         if (producer == null || outboxEventRepository == null) {
-            // Skip test if Kafka is not available
             return;
         }
 
-        // Given: A train event
         TrainEventDTO event = new TrainEventDTO("train-123", "DEPARTED");
-        
-        // When: Send event through producer
         producer.sendEvent(event);
 
-        // Then: Event should be saved in outbox with PENDING status
         var events = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
         assertThat(events).isNotEmpty();
         assertThat(events.get(0).getKey()).isEqualTo("train-123");
         assertThat(events.get(0).getTopic()).isEqualTo("train-events");
-        assertThat(events.get(0).getStatus()).isEqualTo(OutboxEvent.Status.PENDING);
     }
 }
