@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(git reset *)",
+      "Bash(mvn *)",
+      "Bash(.\\mvnw.cmd *)",
+      "Bash(findstr *)"
+    ]
+  },
+  "$version": 3
+}

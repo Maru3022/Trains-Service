@@ -16,7 +16,10 @@ public class OutboxEvent {
     private Long id;
 
     private String topic;
+    
+    @Column(name = "`key`")
     private String key;
+    
     private String payload;
 
     @Enumerated(EnumType.STRING)
