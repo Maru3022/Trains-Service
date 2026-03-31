@@ -5,6 +5,7 @@ import com.example.trainsservice.model.Train;
 import com.example.trainsservice.service.TrainService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
@@ -16,7 +17,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = TrainController.class)
+@WebMvcTest(controllers = TrainController.class, excludeAutoConfiguration = KafkaAutoConfiguration.class)
 @ActiveProfiles("test")
 public class TrainControllerTest {
 

@@ -7,6 +7,7 @@ import com.example.trainsservice.repository.OutboxEventRepository;
 import com.example.trainsservice.service.messaging.TrainEventProducer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
@@ -15,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, excludeAutoConfiguration = KafkaAutoConfiguration.class)
 @DirtiesContext
 @ActiveProfiles("test")
 @Import(TestKafkaConfig.class)
