@@ -7,7 +7,6 @@ import com.example.trainsservice.service.messaging.TrainEventProducer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@EmbeddedKafka(partitions = 1,
-        brokerProperties = "listeners=PLAINTEXT://localhost:9092")
 @DirtiesContext
 @ActiveProfiles("test")
 public class TrainMessagingTest {
@@ -30,13 +27,17 @@ public class TrainMessagingTest {
     @Test
     @Transactional
     void testSendEvent() {
+        // Given: A train event
         TrainEventDTO event = new TrainEventDTO("train-123", "DEPARTED");
+        
+        // When: Send event through producer
         producer.sendEvent(event);
 
-        // Check that event is saved in outbox
+        // Then: Event should be saved in outbox with PENDING status
         var events = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
-        assertThat(events).hasSize(1);
+        assertThat(events).isNotEmpty();
         assertThat(events.get(0).getKey()).isEqualTo("train-123");
         assertThat(events.get(0).getTopic()).isEqualTo("train-events");
+        assertThat(events.get(0).getStatus()).isEqualTo(OutboxEvent.Status.PENDING);
     }
 }

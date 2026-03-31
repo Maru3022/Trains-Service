@@ -5,12 +5,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
-//@Configuration
+@Configuration
 public class KafkaConfig {
 
     @Bean
     public NewTopic trainsTopic(){
-        return TopicBuilder.name("trains-evets")
+        return TopicBuilder.name("train-events")
                 .partitions(3)
                 .replicas(1)
                 .build();

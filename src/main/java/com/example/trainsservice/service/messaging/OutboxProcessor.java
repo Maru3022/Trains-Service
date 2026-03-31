@@ -23,20 +23,29 @@ public class OutboxProcessor {
     @Scheduled(fixedDelay = 5000) // Process every 5 seconds
     @Transactional
     public void processOutbox() {
-        List<OutboxEvent> pendingEvents = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
+        try {
+            List<OutboxEvent> pendingEvents = outboxEventRepository.findByStatusOrderByCreatedAt(OutboxEvent.Status.PENDING);
 
-        for (OutboxEvent event : pendingEvents) {
-            try {
-                kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
-                event.setStatus(OutboxEvent.Status.SENT);
-                event.setProcessedAt(LocalDateTime.now());
-                outboxEventRepository.save(event);
-                log.info("Sent event to Kafka: {}", event.getId());
-            } catch (Exception e) {
-                log.error("Failed to send event {}: {}", event.getId(), e.getMessage());
-                event.setStatus(OutboxEvent.Status.FAILED);
-                outboxEventRepository.save(event);
+            if (pendingEvents.isEmpty()) {
+                log.debug("No pending events to process");
+                return;
             }
+
+            for (OutboxEvent event : pendingEvents) {
+                try {
+                    kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
+                    event.setStatus(OutboxEvent.Status.SENT);
+                    event.setProcessedAt(LocalDateTime.now());
+                    outboxEventRepository.save(event);
+                    log.info("Sent event to Kafka: {}", event.getId());
+                } catch (Exception e) {
+                    log.error("Failed to send event {}: {}", event.getId(), e.getMessage());
+                    event.setStatus(OutboxEvent.Status.FAILED);
+                    outboxEventRepository.save(event);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error in outbox processor: {}", e.getMessage(), e);
         }
     }
 }

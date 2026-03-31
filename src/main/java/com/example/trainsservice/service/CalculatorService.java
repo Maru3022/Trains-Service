@@ -15,7 +15,7 @@ public class CalculatorService {
         log.info("Calculating 1RM for weight: {} and reps: {}", weight,reps);
 
         double result = weight * (1 + (double) reps / 30);
-        System.out.println("DEBUG: Calculation finished. Result: " + result);
+        log.debug("Calculation finished. Result: {}", result);
         return new OneRepMaxResponseDTO(result,"Epley");
     }
 }
