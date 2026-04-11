@@ -4,6 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Qwen Code ###
+.qwen/
+
 ### STS ###
 .apt_generated
 .classpath
