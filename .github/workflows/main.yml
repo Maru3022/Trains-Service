@@ -1,4 +1,4 @@
-name: Java CI/CD with Docker Compose
+name: Java CI/CD
 
 on:
   push:
@@ -269,7 +269,7 @@ jobs:
         if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
-            cd /opt/trains-service
+            cd /opt/microservices
 
             export IMAGE_TAG=sha-${{ github.sha }}
             export REGISTRY=${{ env.REGISTRY }}
@@ -277,10 +277,9 @@ jobs:
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            # Обновление сервиса через общий docker-compose
             docker compose pull trains-app
-            docker compose up -d --no-deps --force-recreate trains-app
-
-            docker compose -f monitoring/docker-compose.monitoring.yml up -d
+            docker compose up -d --no-deps trains-app
 
             docker image prune -f
           EOF
@@ -393,7 +392,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
             set -e
-            cd /opt/trains-service
+            cd /opt/microservices
 
             export IMAGE_TAG=sha-${{ github.sha }}
             export REGISTRY=${{ env.REGISTRY }}
@@ -404,11 +403,8 @@ jobs:
             # Pull new image заранее
             docker compose pull trains-app
 
-            # Rolling restart — поднять новый, затем убрать старый
-            docker compose up -d --no-deps --force-recreate trains-app
-
-            # Поднять/обновить мониторинг
-            docker compose -f monitoring/docker-compose.monitoring.yml up -d
+            # Rolling restart через общий docker-compose
+            docker compose up -d --no-deps trains-app
 
             # Чистка старых образов
             docker image prune -f

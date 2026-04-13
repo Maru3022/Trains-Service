@@ -101,49 +101,6 @@ curl http://localhost:8035/actuator/prometheus
 
 ---
 
-## 2. Docker развертывание
-
-### 2.1 Сборка Docker образа
-
-```bash
-# Сборка JAR
-mvn clean package -DskipTests
-
-# Сборка Docker образа
-docker build -t trains-service:latest .
-```
-
-### 2.2 Запуск с Docker Compose
-
-```bash
-# Запуск основных сервисов
-docker compose up -d
-
-# Запуск с мониторингом
-docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
-
-# Просмотр логов
-docker compose logs -f trains-app
-
-# Остановка
-docker compose down
-```
-
-### 2.3 Проверка контейнеров
-
-```bash
-# Список запущенных контейнеров
-docker compose ps
-
-# Логи приложения
-docker compose logs trains-app
-
-# Интерактивный доступ
-docker compose exec trains-app /bin/bash
-```
-
----
-
 ## 3. Конфигурация переменных окружения
 
 ### 3.1 Системные переменные
@@ -286,9 +243,6 @@ http://localhost:3000
 ### 6.3 Логи приложения
 
 ```bash
-# Просмотр логов через Docker
-docker compose logs -f trains-app
-
 # Логирование в файл
 # Настраивается в logback-spring.xml
 tail -f logs/application.log
@@ -461,19 +415,19 @@ sudo journalctl -f -u trains-service
 
 ```bash
 # 1. Остановить текущую версию
-docker compose down
+# Остановить Java процесс
 
 # 2. Извлечь новую версию
 git pull origin main
 
-# 3. Пересобрать Docker образ
-docker compose build --no-cache
+# 3. Пересобрать приложение
+mvn clean package -DskipTests
 
 # 4. Запустить новую версию
-docker compose up -d
+java -jar target/Trains-Service-*.jar
 
 # 5. Проверить статус
-docker compose logs -f trains-app
+curl http://localhost:8035/actuator/health
 ```
 
 ---
