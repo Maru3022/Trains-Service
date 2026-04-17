@@ -5,7 +5,9 @@ import com.example.trainsservice.service.TrainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -29,10 +31,15 @@ public class TrainController {
     }
 
     @PostMapping
-    public Train createTrain(
+    public ResponseEntity<Train> createTrain(
             @RequestBody Train train
     ){
-        return trainService.saveTrain(train);
+        Train savedTrain = trainService.saveTrain(train);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(savedTrain.getId())
+                .toUri();
+        return ResponseEntity.created(location).body(savedTrain);
     }
 
     @DeleteMapping("/{id}")

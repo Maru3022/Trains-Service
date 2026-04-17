@@ -4,6 +4,8 @@ import com.example.trainsservice.dto.TrainEventDTO;
 import com.example.trainsservice.model.Train;
 import com.example.trainsservice.repository.TrainRepository;
 import com.example.trainsservice.service.messaging.TrainEventProducer;
+import com.example.trainsservice.service.messaging.TrainEventType;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +28,7 @@ public class TrainService {
     public Train saveTrain(Train train){
         Train savedTrain = trainRepository.save(train);
         // Send event
-        TrainEventDTO event = new TrainEventDTO(savedTrain.getId().toString(), "CREATED");
+        TrainEventDTO event = new TrainEventDTO(savedTrain.getId().toString(), TrainEventType.CREATED.name());
         trainEventProducer.sendEvent(event);
         return savedTrain;
     }
@@ -37,9 +39,10 @@ public class TrainService {
 
     @Transactional
     public void deleteTrain(Long id){
+        trainRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Train with id " + id + " not found"));
         trainRepository.deleteById(id);
         // Send event
-        TrainEventDTO event = new TrainEventDTO(id.toString(), "DELETED");
+        TrainEventDTO event = new TrainEventDTO(id.toString(), TrainEventType.DELETED.name());
         trainEventProducer.sendEvent(event);
     }
 }
