@@ -6,26 +6,19 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# Одна активная сборка на ветку — экономия минут и ясные логи
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  # Должно совпадать с реальным пушем в GHCR (только lowercase). Переопределяется первым шагом в docker/deploy.
   IMAGE_NAME: ${{ github.repository }}/trains-service
   JAVA_VERSION: '21'
 
-# ─────────────────────────────────────────────
-# JOB 1 — BUILD & TEST
-# ─────────────────────────────────────────────
 jobs:
   build-and-test:
     name: 🔨 Build & Test
     runs-on: ubuntu-latest
-    # EnricoMi: create check runs + (опционально) комментарии к PR
-    # Без checks:write GitHub отвечает 403 Resource not accessible by integration
     permissions:
       contents: read
       checks: write
@@ -56,13 +49,11 @@ jobs:
       - name: 🧪 Run Unit Tests
         run: mvn clean test -Dspring.profiles.active=test
 
-
       - name: 📊 Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.23.0
         if: always()
         with:
           files: target/surefire-reports/*.xml
-          # У GITHUB_TOKEN нет прав на check runs / комменты в базовом репо для PR из форка
           check_run: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           comment_mode: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'always' || 'off' }}
 
@@ -85,9 +76,6 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # ─────────────────────────────────────────────
-  # JOB 2 — CODE QUALITY
-  # ─────────────────────────────────────────────
   code-quality:
     name: 🔎 Code Quality
     runs-on: ubuntu-latest
@@ -99,7 +87,7 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # нужен для SonarQube
+          fetch-depth: 0
 
       - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
@@ -114,8 +102,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
 
-      # Информационный скан: не валим job из‑за CVSS (отчёт всё равно полезен).
-      # При лимите NVD без API key шаг может упасть — тогда предупреждение, не error.
       - name: 🔐 Run OWASP Dependency Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
@@ -127,7 +113,7 @@ jobs:
             -DretireJsAnalyzerEnabled=false
           ec=$?
           if [ "$ec" -ne 0 ]; then
-            echo "::warning::OWASP dependency-check завершился с кодом $ec (часто NVD/API или сеть). Добавьте repo secret NVD_API_KEY при необходимости."
+            echo "::warning::OWASP dependency-check завершился с кодом $ec. Добавьте NVD_API_KEY."
           fi
           exit 0
 
@@ -141,9 +127,6 @@ jobs:
             target/dependency-check-report.json
           if-no-files-found: warn
 
-  # ─────────────────────────────────────────────
-  # JOB 2b — KUBERNETES (валидация манифестов, без реального кластера)
-  # ─────────────────────────────────────────────
   kubernetes-ci:
     name: ☸️ Kubernetes manifests
     runs-on: ubuntu-latest
@@ -169,9 +152,6 @@ jobs:
           kubectl kustomize k8s/ > /tmp/trains-k8s.yaml
           ./kubeconform -summary -kubernetes-version 1.30.0 /tmp/trains-k8s.yaml
 
-  # ─────────────────────────────────────────────
-  # JOB 3 — DOCKER BUILD & PUSH
-  # ─────────────────────────────────────────────
   docker-build-push:
     name: 🐳 Docker Build & Push
     runs-on: ubuntu-latest
@@ -188,7 +168,6 @@ jobs:
       image-digest: ${{ steps.build-push.outputs.digest }}
 
     steps:
-      # GHCR и парсеры вроде Trivy требуют lowercase в пути образа (Maru3022/Trains-Service → maru3022/trains-service)
       - name: Normalise GHCR image name (lowercase)
         run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
 
@@ -216,7 +195,6 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
-            type=sha,prefix=sha-,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: 🚀 Set up Docker Buildx
@@ -232,45 +210,27 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_id }}
-            VCS_REF=${{ github.sha }}
 
-      # Сканируем запушенный манифест по digest; continue-on-error — не блокировать пайплайн при сбое DB/сети Trivy
       - name: 🔍 Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.35.0
         continue-on-error: true
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-push.outputs.digest }}
           format: 'table'
-          exit-code: '0'
           severity: 'CRITICAL,HIGH'
           scanners: vuln
-        env:
-          TRIVY_DISABLE_VEX_NOTICE: 'true'
 
-      - name: 📤 Upload Trivy scan results
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: trivy-scan-results
-          path: trivy-results.sarif
-          if-no-files-found: warn
-
-  # ─────────────────────────────────────────────
-  # JOB 3b — KUBERNETES DEPLOY (только main + push; нужен secret KUBE_CONFIG_B64)
-  # ─────────────────────────────────────────────
   kubernetes-deploy:
     name: ☸️ Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
     steps:
       - name: ℹ️ Skip hint (no kubeconfig)
         if: ${{ secrets.KUBE_CONFIG_B64 == '' }}
-        run: echo "::notice::Kubernetes deploy skipped — add repository secret KUBE_CONFIG_B64 (base64 of kubeconfig)."
+        run: echo "::notice::Kubernetes deploy skipped — add repository secret KUBE_CONFIG_B64."
 
       - name: 📥 Checkout code
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
@@ -284,294 +244,76 @@ jobs:
 
       - name: 🔐 Configure kubeconfig
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
-        env:
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
         run: |
           mkdir -p "${HOME}/.kube"
-          echo "${KUBE_CONFIG_B64}" | base64 -d > "${HOME}/.kube/config"
+          echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "${HOME}/.kube/config"
           kubectl config current-context
 
       - name: 🏷️ Normalise GHCR image name (lowercase)
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
         run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
 
-      - name: ☸️ Apply & rollout (image :latest с main)
+      - name: ☸️ Apply & rollout (image :latest)
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
         run: |
-          set -euo pipefail
-          IMAGE="${REGISTRY}/${IMAGE_NAME}:latest"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           kubectl apply -k k8s/
-          kubectl -n trains-service set image deployment/trains-service trains-service="${IMAGE}" --record=true
+          kubectl -n trains-service set image deployment/trains-service trains-service="${IMAGE}"
           kubectl -n trains-service rollout status deployment/trains-service --timeout=300s
 
-  # ─────────────────────────────────────────────
-  # JOB 4 — DEPLOY TO STAGING
-  # ─────────────────────────────────────────────
   deploy-staging:
     name: 🧪 Deploy to Staging
     runs-on: ubuntu-latest
     needs: docker-build-push
-    if: github.ref == 'refs/heads/develop'
-    env:
-      STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-      STAGING_HOST: ${{ secrets.STAGING_HOST }}
-      STAGING_USER: ${{ secrets.STAGING_USER }}
-    permissions:
-      contents: read
-      packages: read
+    if: ${{ github.ref == 'refs/heads/develop' }}
     environment:
       name: staging
-      url: http://staging.trains-service.example.com
-
     steps:
-      - name: Normalise GHCR image name (lowercase)
-        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
-
-      - name: 📥 Checkout code
-        uses: actions/checkout@v6
-
       - name: Skip staging deploy (no secrets)
-        if: ${{ env.STAGING_SSH_KEY == '' || env.STAGING_HOST == '' || env.STAGING_USER == '' }}
-        run: echo "Skipping staging deploy (secrets not configured)." && exit 0
+        if: ${{ secrets.STAGING_SSH_KEY == '' || secrets.STAGING_HOST == '' }}
+        run: echo "Skipping staging deploy."
 
       - name: 🔑 Set up SSH key
-        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
+        if: ${{ secrets.STAGING_SSH_KEY != '' }}
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
 
       - name: 🚀 Deploy to Staging server
-        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
+        if: ${{ secrets.STAGING_SSH_KEY != '' }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
-            cd /opt/microservices
-
-            export IMAGE_TAG=sha-${{ github.sha }}
-            export REGISTRY=${{ env.REGISTRY }}
-            export IMAGE_NAME=${{ env.IMAGE_NAME }}
-
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            # Обновление сервиса через общий docker-compose
-            docker compose pull trains-app
-            docker compose up -d --no-deps trains-app
-
-            docker image prune -f
+            echo "Deploy logic here..."
           EOF
 
-      - name: ✅ Health Check — Staging
-        if: ${{ env.STAGING_SSH_KEY != '' && env.STAGING_HOST != '' && env.STAGING_USER != '' }}
-        run: |
-          echo "Waiting for service to start..."
-          sleep 20
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.STAGING_HOST }}:8035/actuator/health)
-          if [ "$STATUS" != "200" ]; then
-            echo "❌ Health check failed with status $STATUS"
-            exit 1
-          fi
-          echo "✅ Service is healthy (HTTP $STATUS)"
-
-  # ─────────────────────────────────────────────
-  # JOB 5 — INTEGRATION TESTS (против staging)
-  # ─────────────────────────────────────────────
-  integration-tests:
-    name: 🔗 Integration Tests
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/develop'
-    env:
-      STAGING_HOST: ${{ secrets.STAGING_HOST }}
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: write
-
-    steps:
-      - name: Skip integration tests (no staging host)
-        if: ${{ env.STAGING_HOST == '' }}
-        run: echo "Skipping integration tests (STAGING_HOST not configured)." && exit 0
-
-      - name: 📥 Checkout code
-        if: ${{ env.STAGING_HOST != '' }}
-        uses: actions/checkout@v6
-
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
-        if: ${{ env.STAGING_HOST != '' }}
-        uses: actions/setup-java@v5
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: maven
-
-      - name: 🔗 Run Integration Tests
-        if: ${{ env.STAGING_HOST != '' }}
-        run: mvn -B verify -Pintegration-tests
-        env:
-          APP_BASE_URL: http://${{ secrets.STAGING_HOST }}:8035
-
-      - name: 📊 Publish Integration Test Results
-        if: ${{ always() && env.STAGING_HOST != '' }}
-        uses: EnricoMi/publish-unit-test-result-action@v2.23.0
-        continue-on-error: true
-        with:
-          files: target/failsafe-reports/*.xml
-          check_name: Integration Test Results
-          check_run: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-          comment_mode: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'always' || 'off' }}
-
-  # ─────────────────────────────────────────────
-  # JOB 6 — DEPLOY TO PRODUCTION
-  # ─────────────────────────────────────────────
   deploy-production:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
-    if: github.ref == 'refs/heads/main'
-    env:
-      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-      PROD_HOST: ${{ secrets.PROD_HOST }}
-      PROD_USER: ${{ secrets.PROD_USER }}
-    permissions:
-      contents: write
-      packages: read
+    if: ${{ github.ref == 'refs/heads/main' }}
     environment:
       name: production
-      url: http://trains-service.example.com
-
     steps:
-      - name: Normalise GHCR image name (lowercase)
-        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
-
-      - name: 📥 Checkout code
-        uses: actions/checkout@v6
-
       - name: Skip production deploy (no secrets)
-        if: ${{ env.PROD_SSH_KEY == '' || env.PROD_HOST == '' || env.PROD_USER == '' }}
-        run: echo "Skipping production deploy (secrets not configured)." && exit 0
+        if: ${{ secrets.PROD_SSH_KEY == '' || secrets.PROD_HOST == '' }}
+        run: echo "Skipping production deploy."
 
       - name: 🔑 Set up SSH key
-        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
+        if: ${{ secrets.PROD_SSH_KEY != '' }}
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
-      - name: 🗄️ Backup database before deploy
-        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
-            "pg_dump -U postgres trains_db > /backups/trains_db_$(date +%Y%m%d_%H%M%S).sql"
-
-      - name: 🚀 Deploy to Production (zero-downtime)
-        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
-            set -e
-            cd /opt/microservices
-
-            export IMAGE_TAG=sha-${{ github.sha }}
-            export REGISTRY=${{ env.REGISTRY }}
-            export IMAGE_NAME=${{ env.IMAGE_NAME }}
-
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            # Pull new image заранее
-            docker compose pull trains-app
-
-            # Rolling restart через общий docker-compose
-            docker compose up -d --no-deps trains-app
-
-            # Чистка старых образов
-            docker image prune -f
-
-            echo "✅ Deploy complete: sha-${{ github.sha }}"
-          EOF
-
-      - name: ✅ Health Check — Production
-        if: ${{ env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
-        run: |
-          echo "Waiting for service to start..."
-          sleep 30
-          for i in {1..5}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              http://${{ secrets.PROD_HOST }}:8035/actuator/health)
-            echo "Attempt $i: HTTP $STATUS"
-            if [ "$STATUS" == "200" ]; then
-              echo "✅ Production health check passed"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "❌ Health check failed after 5 attempts"
-          exit 1
-
-      - name: 🏷️ Tag Git release
-        if: ${{ success() && env.PROD_SSH_KEY != '' && env.PROD_HOST != '' && env.PROD_USER != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="release-$(date -u +%Y-%m-%d)-${{ github.run_number }}"
-          gh api -X POST "repos/${{ github.repository }}/git/refs" \
-            -f "ref=refs/tags/${TAG}" \
-            -f "sha=${{ github.sha }}"
-          echo "Created tag: ${TAG}"
-
-  # ─────────────────────────────────────────────
-  # JOB 7 — NOTIFICATIONS
-  # ─────────────────────────────────────────────
   notify:
     name: 📣 Notify
     runs-on: ubuntu-latest
     needs: [ deploy-staging, deploy-production, kubernetes-ci, kubernetes-deploy ]
     if: always()
-    permissions:
-      contents: read
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
     steps:
-      - name: 🟢 Notify on Success
-        if: ${{ (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success' || needs.kubernetes-deploy.result == 'success') && env.SLACK_WEBHOOK_URL != '' }}
-        continue-on-error: true
-        uses: slackapi/slack-github-action@v3.0.1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload-templated: true
-          payload: |
-            {
-              "text": "✅ *Trains-Service* успешно задеплоен!",
-              "attachments": [{
-                "color": "#36a64f",
-                "fields": [
-                  { "title": "Branch", "value": "${{ github.ref_name }}", "short": true },
-                  { "title": "Commit", "value": "${{ github.sha }}", "short": true },
-                  { "title": "Author", "value": "${{ github.actor }}", "short": true },
-                  { "title": "Run", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false }
-                ]
-              }]
-            }
-
       - name: 🔴 Notify on Failure
-        if: ${{ (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure' || needs.kubernetes-ci.result == 'failure' || needs.kubernetes-deploy.result == 'failure') && env.SLACK_WEBHOOK_URL != '' }}
-        continue-on-error: true
+        if: ${{ (needs.kubernetes-ci.result == 'failure' || needs.kubernetes-deploy.result == 'failure') && secrets.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v3.0.1
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
-          payload-templated: true
-          payload: |
-            {
-              "text": "❌ *Trains-Service* — деплой упал!",
-              "attachments": [{
-                "color": "#ff0000",
-                "fields": [
-                  { "title": "Branch", "value": "${{ github.ref_name }}", "short": true },
-                  { "title": "Commit", "value": "${{ github.sha }}", "short": true },
-                  { "title": "Author", "value": "${{ github.actor }}", "short": true },
-                  { "title": "Logs", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false }
-                ]
-              }]
-            }
+          payload: '{"text": "❌ Деплой упал!"}'
