@@ -86,12 +86,11 @@ jobs:
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-      - name: 🔧 kubectl client dry-run
+      - name: 🔧 Kustomize validation
         run: |
-          kubectl version --client=true
-          # --validate=false — не обращаться к API-серверу (в CI его нет),
-          # проверяется только структура YAML
-          kubectl kustomize k8s/ | kubectl apply --dry-run=client --validate=false -f -
+          # Используем только kustomize build, чтобы проверить корректность манифестов 
+          # без обращения к API-серверу Kubernetes (устраняет ошибку connection refused)
+          kubectl kustomize k8s/ > /dev/null
 
   docker-build-push:
     name: 🐳 Docker Build & Push
@@ -130,7 +129,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    # ✅ ФИX: передаём секрет в env на уровне job — и проверяем env в if шагов
     env:
       KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
     steps:
@@ -160,7 +158,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build-push
     if: ${{ github.ref == 'refs/heads/develop' }}
-    # ✅ ФИX: то же самое — секрет в env job-а
     env:
       STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
     steps:
@@ -178,7 +175,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
     if: ${{ github.ref == 'refs/heads/main' }}
-    # ✅ ФИX: то же самое
     env:
       PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
     steps:
@@ -191,7 +187,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ kubernetes-deploy, deploy-production ]
     if: always()
-    # ✅ ФИX: секрет в env job-а, проверка через env в условии if шага
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:

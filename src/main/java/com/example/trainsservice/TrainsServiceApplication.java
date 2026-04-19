@@ -6,6 +6,8 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import java.util.ArrayList;
+
 @SpringBootApplication
 @EnableScheduling
 @EnableJpaRepositories(basePackages = "com.example.trainsservice.repository")
@@ -15,5 +17,4 @@ public class TrainsServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(TrainsServiceApplication.class, args);
     }
-
 }
