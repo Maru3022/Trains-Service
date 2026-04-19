@@ -18,25 +18,26 @@ CREATE TABLE IF NOT EXISTS progress (
     FOREIGN KEY (train_id) REFERENCES train(id) ON DELETE CASCADE
 );
 
--- Таблица маршрутов
+-- Таблица маршрутов (соответствует сущности Route)
 CREATE TABLE IF NOT EXISTS route (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255),
-    distance DOUBLE PRECISION
+    title VARCHAR(255),
+    description VARCHAR(255)
 );
 
--- Таблица статистики
+-- Таблица статистики (соответствует сущности Stats)
 CREATE TABLE IF NOT EXISTS stats (
     id BIGSERIAL PRIMARY KEY,
-    total_workouts INTEGER,
-    average_weight DOUBLE PRECISION
+    user_id BIGINT,
+    total_weight_lifted DOUBLE PRECISION,
+    total_workouts_done INTEGER
 );
 
--- Таблица Outbox для надежной доставки событий
+-- Таблица Outbox для надежной доставки событий (Transactional Outbox)
 CREATE TABLE IF NOT EXISTS outbox (
     id BIGSERIAL PRIMARY KEY,
     topic VARCHAR(255) NOT NULL,
-    key VARCHAR(255),
+    "key" VARCHAR(255),
     payload TEXT NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

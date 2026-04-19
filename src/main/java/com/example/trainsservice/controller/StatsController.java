@@ -1,19 +1,21 @@
 package com.example.trainsservice.controller;
 
-import lombok.extern.slf4j.Slf4j;
+import com.example.trainsservice.dto.StatsSummaryResponse;
+import com.example.trainsservice.service.StatisticsService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RequestMapping("/api/v1/stats")
 @RestController
-@Slf4j
+@RequiredArgsConstructor
 public class StatsController {
 
+    private final StatisticsService statisticsService;
+
     @GetMapping("/summary")
-    public String getGeneralStats(){
-        log.warn("Stats summary requested, but data is currently empty.");
-        System.out.println("INFO: Empty stats summery returned to user");
-        return "Training stats are currently empty. Log your first set!";
+    public StatsSummaryResponse getGeneralStats() {
+        return statisticsService.getTrainingSummary();
     }
 }

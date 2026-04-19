@@ -5,6 +5,7 @@ import com.example.trainsservice.model.Progress;
 import com.example.trainsservice.model.Train;
 import com.example.trainsservice.repository.ProgressRepository;
 import com.example.trainsservice.repository.TrainRepository;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +23,7 @@ public class MovementService {
             ProgressUpdateDTO dto
     ){
         Train train = trainRepository.findById(dto.getExerciseId())
-                .orElseThrow(() -> new RuntimeException("Exercise not found with id: " + dto.getExerciseId()));
+                .orElseThrow(() -> new EntityNotFoundException("Train not found with id: " + dto.getExerciseId()));
 
         Progress progress = new Progress();
         progress.setTrain(train);

@@ -1,10 +1,11 @@
 package com.example.trainsservice.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.List;
 
 @Entity
 @Setter
@@ -17,7 +18,4 @@ public class Route {
 
     private String title;
     private String description;
-
-    @OneToMany
-    private List<Train> exercises;
 }

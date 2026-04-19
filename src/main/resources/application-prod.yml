@@ -1,0 +1,5 @@
+# Профиль production: схему держим под контролем (без ddl-auto: update).
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
