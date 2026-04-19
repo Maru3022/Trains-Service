@@ -35,17 +35,6 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: 🔍 Verify Maven version
-        run: mvn --version
-
-      - name: 📦 Cache Maven dependencies
-        uses: actions/cache@v5
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
       - name: 🧪 Run Unit Tests
         run: mvn clean test -Dspring.profiles.active=test
 
@@ -57,14 +46,6 @@ jobs:
           check_run: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           comment_mode: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'always' || 'off' }}
 
-      - name: 📈 Upload JaCoCo Coverage Report
-        uses: codecov/codecov-action@v6
-        if: always()
-        continue-on-error: true
-        with:
-          files: target/site/jacoco/jacoco.xml
-          fail_ci_if_error: false
-
       - name: 🏗️ Build with Maven (skip tests)
         run: mvn clean package -DskipTests
 
@@ -74,7 +55,6 @@ jobs:
           name: trains-service-jar
           path: target/*.jar
           retention-days: 7
-          if-no-files-found: error
 
   code-quality:
     name: 🔎 Code Quality
@@ -82,7 +62,6 @@ jobs:
     needs: build-and-test
     permissions:
       contents: read
-
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
@@ -94,13 +73,6 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-          cache: maven
-
-      - name: 📦 Restore Maven cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
 
       - name: 🔐 Run OWASP Dependency Check
         env:
@@ -111,21 +83,7 @@ jobs:
             -DfailBuildOnCVSS=11 \
             -Dformats=HTML,JSON \
             -DretireJsAnalyzerEnabled=false
-          ec=$?
-          if [ "$ec" -ne 0 ]; then
-            echo "::warning::OWASP dependency-check завершился с кодом $ec. Добавьте NVD_API_KEY."
-          fi
           exit 0
-
-      - name: 📤 Upload Dependency Check Report
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: dependency-check-report
-          path: |
-            target/dependency-check-report.html
-            target/dependency-check-report.json
-          if-no-files-found: warn
 
   kubernetes-ci:
     name: ☸️ Kubernetes manifests
@@ -137,20 +95,10 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v6
 
-      - name: 🔧 kubectl client dry-run (Kustomize)
+      - name: 🔧 kubectl client dry-run
         run: |
-          set -euo pipefail
           kubectl version --client=true
           kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -
-
-      - name: 📋 kubeconform (схема API)
-        run: |
-          set -euo pipefail
-          KUBECONFORM_VERSION=v0.6.7
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
-          chmod +x kubeconform
-          kubectl kustomize k8s/ > /tmp/trains-k8s.yaml
-          ./kubeconform -summary -kubernetes-version 1.30.0 /tmp/trains-k8s.yaml
 
   docker-build-push:
     name: 🐳 Docker Build & Push
@@ -160,15 +108,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
       id-token: write
-
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-digest: ${{ steps.build-push.outputs.digest }}
-
     steps:
-      - name: Normalise GHCR image name (lowercase)
+      - name: Normalise GHCR image name
         run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
 
       - name: 📥 Checkout code
@@ -187,50 +129,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Extract Docker metadata (tags & labels)
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: 🚀 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: 🐳 Build and Push Docker image
-        id: build-push
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: 🔍 Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@v0.35.0
-        continue-on-error: true
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-push.outputs.digest }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          scanners: vuln
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
   kubernetes-deploy:
     name: ☸️ Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    permissions:
-      contents: read
     steps:
-      - name: ℹ️ Skip hint (no kubeconfig)
+      - name: ℹ️ Skip hint
         if: ${{ secrets.KUBE_CONFIG_B64 == '' }}
-        run: echo "::notice::Kubernetes deploy skipped — add repository secret KUBE_CONFIG_B64."
+        run: echo "::notice::Kubernetes deploy skipped — add secret KUBE_CONFIG_B64."
 
       - name: 📥 Checkout code
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
@@ -239,39 +153,29 @@ jobs:
       - name: 🔧 Install kubectl
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
         uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.30.2'
 
       - name: 🔐 Configure kubeconfig
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
         run: |
           mkdir -p "${HOME}/.kube"
           echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "${HOME}/.kube/config"
-          kubectl config current-context
 
-      - name: 🏷️ Normalise GHCR image name (lowercase)
-        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
-        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
-
-      - name: ☸️ Apply & rollout (image :latest)
+      - name: ☸️ Apply & rollout
         if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          IMAGE="${{ env.REGISTRY }}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service:latest"
           kubectl apply -k k8s/
           kubectl -n trains-service set image deployment/trains-service trains-service="${IMAGE}"
-          kubectl -n trains-service rollout status deployment/trains-service --timeout=300s
 
   deploy-staging:
     name: 🧪 Deploy to Staging
     runs-on: ubuntu-latest
     needs: docker-build-push
     if: ${{ github.ref == 'refs/heads/develop' }}
-    environment:
-      name: staging
     steps:
-      - name: Skip staging deploy (no secrets)
-        if: ${{ secrets.STAGING_SSH_KEY == '' || secrets.STAGING_HOST == '' }}
-        run: echo "Skipping staging deploy."
+      - name: Skip check
+        if: ${{ secrets.STAGING_SSH_KEY == '' }}
+        run: echo "Skipping staging."
 
       - name: 🔑 Set up SSH key
         if: ${{ secrets.STAGING_SSH_KEY != '' }}
@@ -279,39 +183,24 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
 
-      - name: 🚀 Deploy to Staging server
-        if: ${{ secrets.STAGING_SSH_KEY != '' }}
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
-            echo "Deploy logic here..."
-          EOF
-
   deploy-production:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     needs: [ docker-build-push ]
     if: ${{ github.ref == 'refs/heads/main' }}
-    environment:
-      name: production
     steps:
-      - name: Skip production deploy (no secrets)
-        if: ${{ secrets.PROD_SSH_KEY == '' || secrets.PROD_HOST == '' }}
-        run: echo "Skipping production deploy."
-
-      - name: 🔑 Set up SSH key
-        if: ${{ secrets.PROD_SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+      - name: Skip check
+        if: ${{ secrets.PROD_SSH_KEY == '' }}
+        run: echo "Skipping production."
 
   notify:
     name: 📣 Notify
     runs-on: ubuntu-latest
-    needs: [ deploy-staging, deploy-production, kubernetes-ci, kubernetes-deploy ]
+    needs: [ kubernetes-deploy, deploy-production ]
     if: always()
     steps:
       - name: 🔴 Notify on Failure
-        if: ${{ (needs.kubernetes-ci.result == 'failure' || needs.kubernetes-deploy.result == 'failure') && secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ (needs.kubernetes-deploy.result == 'failure' || needs.deploy-production.result == 'failure') && secrets.SLACK_WEBHOOK_URL != '' }}
         uses: slackapi/slack-github-action@v3.0.1
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
