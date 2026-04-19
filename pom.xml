@@ -129,6 +129,16 @@
 
     <profiles>
         <profile>
+            <id>bench</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.h2database</groupId>
+                    <artifactId>h2</artifactId>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
             <id>integration-tests</id>
             <build>
                 <plugins>
