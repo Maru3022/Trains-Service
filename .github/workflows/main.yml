@@ -290,7 +290,7 @@ jobs:
           echo "Waiting for service to start..."
           sleep 20
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.STAGING_HOST }}:8080/actuator/health)
+            http://${{ secrets.STAGING_HOST }}:8035/actuator/health)
           if [ "$STATUS" != "200" ]; then
             echo "❌ Health check failed with status $STATUS"
             exit 1
@@ -333,7 +333,7 @@ jobs:
         if: ${{ env.STAGING_HOST != '' }}
         run: mvn -B verify -Pintegration-tests
         env:
-          APP_BASE_URL: http://${{ secrets.STAGING_HOST }}:8080
+          APP_BASE_URL: http://${{ secrets.STAGING_HOST }}:8035
 
       - name: 📊 Publish Integration Test Results
         if: ${{ always() && env.STAGING_HOST != '' }}
@@ -419,7 +419,7 @@ jobs:
           sleep 30
           for i in {1..5}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              http://${{ secrets.PROD_HOST }}:8080/actuator/health)
+              http://${{ secrets.PROD_HOST }}:8035/actuator/health)
             echo "Attempt $i: HTTP $STATUS"
             if [ "$STATUS" == "200" ]; then
               echo "✅ Production health check passed"

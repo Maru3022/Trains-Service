@@ -26,15 +26,6 @@ server:
   port: 8035
   address: 0.0.0.0
 
-eureka:
-  client:
-    register-with-eureka: true
-    fetch-registry: true
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
-  instance:
-    prefer-ip-address: true
-
 logging:
   level:
     root: INFO

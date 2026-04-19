@@ -18,16 +18,6 @@ public class MovementService {
     private final ProgressRepository progressRepository;
     private final TrainRepository trainRepository;
 
-    public Progress logWorkout(
-            Long trainId,
-            Integer reps,
-            Double weight
-    ){
-        Progress progress = new Progress();
-
-        return progressRepository.save(progress);
-    }
-
     public void registerSet(
             ProgressUpdateDTO dto
     ){
