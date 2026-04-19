@@ -89,7 +89,9 @@ jobs:
       - name: 🔧 kubectl client dry-run
         run: |
           kubectl version --client=true
-          kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -
+          # --validate=false — не обращаться к API-серверу (в CI его нет),
+          # проверяется только структура YAML
+          kubectl kustomize k8s/ | kubectl apply --dry-run=client --validate=false -f -
 
   docker-build-push:
     name: 🐳 Docker Build & Push
