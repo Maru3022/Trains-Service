@@ -142,12 +142,40 @@ jobs:
           if-no-files-found: warn
 
   # ─────────────────────────────────────────────
+  # JOB 2b — KUBERNETES (валидация манифестов, без реального кластера)
+  # ─────────────────────────────────────────────
+  kubernetes-ci:
+    name: ☸️ Kubernetes manifests
+    runs-on: ubuntu-latest
+    needs: [ build-and-test ]
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v6
+
+      - name: 🔧 kubectl client dry-run (Kustomize)
+        run: |
+          set -euo pipefail
+          kubectl version --client=true
+          kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -
+
+      - name: 📋 kubeconform (схема API)
+        run: |
+          set -euo pipefail
+          KUBECONFORM_VERSION=v0.6.7
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
+          chmod +x kubeconform
+          kubectl kustomize k8s/ > /tmp/trains-k8s.yaml
+          ./kubeconform -summary -kubernetes-version 1.30.0 /tmp/trains-k8s.yaml
+
+  # ─────────────────────────────────────────────
   # JOB 3 — DOCKER BUILD & PUSH
   # ─────────────────────────────────────────────
   docker-build-push:
     name: 🐳 Docker Build & Push
     runs-on: ubuntu-latest
-    needs: [ build-and-test, code-quality ]
+    needs: [ build-and-test, code-quality, kubernetes-ci ]
     if: github.event_name == 'push'
     permissions:
       contents: read
@@ -228,6 +256,55 @@ jobs:
           name: trivy-scan-results
           path: trivy-results.sarif
           if-no-files-found: warn
+
+  # ─────────────────────────────────────────────
+  # JOB 3b — KUBERNETES DEPLOY (только main + push; нужен secret KUBE_CONFIG_B64)
+  # ─────────────────────────────────────────────
+  kubernetes-deploy:
+    name: ☸️ Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: [ docker-build-push ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - name: ℹ️ Skip hint (no kubeconfig)
+        if: ${{ secrets.KUBE_CONFIG_B64 == '' }}
+        run: echo "::notice::Kubernetes deploy skipped — add repository secret KUBE_CONFIG_B64 (base64 of kubeconfig)."
+
+      - name: 📥 Checkout code
+        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
+        uses: actions/checkout@v6
+
+      - name: 🔧 Install kubectl
+        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.2'
+
+      - name: 🔐 Configure kubeconfig
+        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+        run: |
+          mkdir -p "${HOME}/.kube"
+          echo "${KUBE_CONFIG_B64}" | base64 -d > "${HOME}/.kube/config"
+          kubectl config current-context
+
+      - name: 🏷️ Normalise GHCR image name (lowercase)
+        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
+
+      - name: ☸️ Apply & rollout (image :latest с main)
+        if: ${{ secrets.KUBE_CONFIG_B64 != '' }}
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+        run: |
+          set -euo pipefail
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:latest"
+          kubectl apply -k k8s/
+          kubectl -n trains-service set image deployment/trains-service trains-service="${IMAGE}" --record=true
+          kubectl -n trains-service rollout status deployment/trains-service --timeout=300s
 
   # ─────────────────────────────────────────────
   # JOB 4 — DEPLOY TO STAGING
@@ -447,7 +524,7 @@ jobs:
   notify:
     name: 📣 Notify
     runs-on: ubuntu-latest
-    needs: [ deploy-staging, deploy-production ]
+    needs: [ deploy-staging, deploy-production, kubernetes-ci, kubernetes-deploy ]
     if: always()
     permissions:
       contents: read
@@ -456,7 +533,7 @@ jobs:
 
     steps:
       - name: 🟢 Notify on Success
-        if: ${{ (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success') && env.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success' || needs.kubernetes-deploy.result == 'success') && env.SLACK_WEBHOOK_URL != '' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v3.0.1
         with:
@@ -478,7 +555,7 @@ jobs:
             }
 
       - name: 🔴 Notify on Failure
-        if: ${{ (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure') && env.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure' || needs.kubernetes-ci.result == 'failure' || needs.kubernetes-deploy.result == 'failure') && env.SLACK_WEBHOOK_URL != '' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v3.0.1
         with:

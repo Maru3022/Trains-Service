@@ -1,6 +1,8 @@
 # 🚄 Trains-Service
 
-**Trains-Service** — это бэкенд-система на Java Spring Boot для управления данными о поездах (или тренировках) и мониторинга прогресса в реальном времени. Проект сочетает в себе классический REST API и современную событийную архитектуру на базе Apache Kafka.
+**Trains-Service** — микросервис на Java Spring Boot: REST API для сущности «поезд / тренировка», учёт прогресса, статистика, калькулятор 1RM, **Transactional Outbox** и Kafka, готовность к **Kubernetes** (манифесты Kustomize в `k8s/`), CI/CD (сборка, тесты, OWASP, образ в GHCR, валидация манифестов, опциональный деплой в кластер и SSH-стейджинг/прод).
+
+Инфраструктура БД/брокеров обычно поднимается **общим** compose родительского репозитория; в Kubernetes — через ваши сервисы и `ConfigMap`/`Secret` (см. ниже).
 
 ---
 
@@ -35,7 +37,37 @@
 | **Сообщения** | Apache Kafka (`SPRING_KAFKA_BOOTSTRAP_SERVERS`, по умолчанию `localhost:9092`) |
 | **Документация** | Swagger UI (OpenAPI 2.8.4) |
 | **Мониторинг** | Prometheus + Grafana |
+| **Оркестрация** | Kubernetes (база в `k8s/`, Kustomize) |
 | **Инструменты** | Lombok, Maven |
+
+---
+
+## ☸️ Kubernetes
+
+В каталоге **`k8s/`** лежит **Kustomize-база**: `Namespace`, `ConfigMap` (несекретные переменные окружения), `Deployment` (пробы `/actuator/health/liveness` и `readiness`, ресурсы, rolling update), `Service` (порт **8035**), **HPA** по CPU (нужен Metrics Server в кластере).
+
+### Локальная проверка (без кластера)
+
+```bash
+kubectl kustomize k8s/
+kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -
+```
+
+### Установка в кластер
+
+1. Подставьте в `k8s/configmap.yaml` реальные DNS сервисов PostgreSQL, Kafka и Redis (или используйте **overlay** Kustomize на команду/окружение).
+2. Создайте секрет с паролем БД (пример в `k8s/secret.yaml.example`):
+   ```bash
+   kubectl -n trains-service create secret generic trains-service-secret \
+     --from-literal=DB_PASSWORD='***'
+   ```
+3. Образ по умолчанию: `ghcr.io/maru3022/trains-service:latest` (в `kustomization.yaml` → `images`). Для приватного GHCR добавьте `imagePullSecrets` в `Deployment` (patch) и `docker login` в registry кластера.
+4. Применение:
+   ```bash
+   kubectl apply -k k8s/
+   ```
+
+Остальные микросервисы вы можете оформлять так же отдельными каталогами/overlays и связывать через общий Ingress или service mesh — этот репозиторий даёт **шаблон для одного сервиса**.
 
 ---
 
@@ -191,12 +223,33 @@ mvn spring-boot:run
 
 ---
 
+## 🔄 CI/CD (GitHub Actions)
+
+Рабочий процесс `.github/workflows/main.yml` включает:
+
+1. **Сборка и тесты** — JDK 21, `mvn test`, публикация результатов тестов, JaCoCo, артефакт JAR.
+2. **Качество** — OWASP Dependency-Check (не валит пайплайн при сбое NVD).
+3. **Kubernetes** — `kubectl kustomize` + `kubectl apply --dry-run=client`, затем **kubeconform** против схемы API 1.30.
+4. **Docker** — сборка и push в **GHCR** (после успеха п.1–3), **Trivy** по образу.
+5. **Деплой** — по желанию: SSH staging/develop, SSH production/main, **Kubernetes** на `main` при наличии секрета **`KUBE_CONFIG_B64`** (kubeconfig в base64): `kubectl apply -k k8s/` и `kubectl set image` на `:latest`.
+6. **Уведомления** — Slack при настроенном webhook.
+
+---
+
 ## 📁 Структура проекта
 
 ```
 Trains-Service/
 ├── src/
 │   └── main/java/...
+├── k8s/
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── hpa.yaml
+│   └── secret.yaml.example
 ├── scripts/
 │   └── postgres-outbox-manual.sql
 ├── monitoring/

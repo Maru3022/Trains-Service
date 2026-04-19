@@ -1,0 +1,18 @@
+# База Kustomize для Trains-Service. Подставьте свой образ в CI или: kubectl kustomize edit set image ...
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: trains-service
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+
+# Имя образа в Deployment — trains-service; теги подменяются при деплое (CI или вручную).
+images:
+  - name: trains-service
+    newName: ghcr.io/maru3022/trains-service
+    newTag: latest
