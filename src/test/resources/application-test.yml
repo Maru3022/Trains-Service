@@ -22,8 +22,15 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   data:
     redis:
+      host: localhost
+      port: 6379
       repositories:
         enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
   cloud:
     config:
       enabled: false
