@@ -18,4 +18,6 @@ public class Train {
     private String name;
     private String category;
     private Integer durationMinutes;
+
+    private String userId;
 }
