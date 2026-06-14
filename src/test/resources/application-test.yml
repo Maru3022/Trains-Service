@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;NON_KEYWORDS=KEY
     username: sa
     password: ""
     driver-class-name: org.h2.Driver
@@ -9,9 +9,8 @@ spring:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
     open-in-view: false
-  task:
-    scheduling:
-      enabled: false
+  flyway:
+    enabled: false
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
@@ -23,13 +22,21 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   data:
     redis:
-      enabled: false
       repositories:
         enabled: false
-      connect-timeout: 10ms
-cloud:
-  config:
+  cloud:
+    config:
+      enabled: false
+  task:
+    scheduling:
+      enabled: false
+
+eureka:
+  client:
     enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
 logging:
   level:
     root: WARN

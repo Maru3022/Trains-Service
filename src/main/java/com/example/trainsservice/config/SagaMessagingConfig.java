@@ -2,6 +2,7 @@ package com.example.trainsservice.config;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class SagaMessagingConfig {
 
     @Bean
+    @ConditionalOnMissingBean(name = "sagaConsumerFactory")
     public ConsumerFactory<String, String> sagaConsumerFactory(KafkaProperties kafkaProperties) {
         Map<String, Object> props = kafkaProperties.buildConsumerProperties(null);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -28,6 +30,7 @@ public class SagaMessagingConfig {
     }
 
     @Bean
+    @ConditionalOnMissingBean(name = "sagaKafkaListenerContainerFactory")
     public ConcurrentKafkaListenerContainerFactory<String, String> sagaKafkaListenerContainerFactory(
             ConsumerFactory<String, String> sagaConsumerFactory) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
