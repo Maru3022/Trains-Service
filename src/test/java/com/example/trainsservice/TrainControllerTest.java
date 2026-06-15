@@ -16,9 +16,12 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
+import java.util.List;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -53,5 +56,39 @@ public class TrainControllerTest {
 
         mockMvc.perform(get("/api/trains/1"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getTrains_WhenCalled_ShouldReturnList() throws Exception {
+        Train train = new Train();
+        when(trainService.getAllTrains()).thenReturn(List.of(train));
+
+        mockMvc.perform(get("/api/trains"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void createTrain_ShouldReturnCreatedAndLocation() throws Exception {
+        String json = "{\"name\":\"Express\",\"category\":\"fast\",\"durationMinutes\":120,\"userId\":\"user-1\"}";
+        Train saved = new Train();
+        saved.setId(10L);
+        saved.setName("Express");
+
+        when(trainService.saveTrain(org.mockito.ArgumentMatchers.any(Train.class))).thenReturn(saved);
+
+        mockMvc.perform(post("/api/trains")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(result -> {
+                    String location = result.getResponse().getHeader("Location");
+                    if (location == null) throw new AssertionError("Location header missing");
+                });
+    }
+
+    @Test
+    void deleteTrain_ShouldReturnNoContent() throws Exception {
+        mockMvc.perform(delete("/api/trains/1"))
+                .andExpect(status().isNoContent());
     }
 }
