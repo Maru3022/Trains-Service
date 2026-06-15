@@ -4,12 +4,7 @@ metadata:
   name: trains-service-config
 data:
   # Замените на DNS сервисов из вашего кластера / общего Helm chart
-  DB_HOST: "postgres.database.svc.cluster.local"
-  DB_PORT: "5432"
-  DB_NAME: "trains_db"
-  DB_USERNAME: "trains_user"
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka.messaging.svc.cluster.local:9092"
-  REDIS_HOST: "redis.cache.svc.cluster.local"
-  REDIS_PORT: "6379"
-  SERVER_PORT: "8035"
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-service:8761/eureka/"
+  SERVER_PORT: "8080"
   SPRING_PROFILES_ACTIVE: "prod"

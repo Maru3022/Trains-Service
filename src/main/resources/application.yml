@@ -3,12 +3,18 @@ spring:
     name: TRAINS-SERVICE
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+      enable-idempotence: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5444}/${DB_NAME:trains_db}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5444}/${DB_NAME:trains_db}}
     username: ${DB_USERNAME:trains_user}
     password: ${DB_PASSWORD:secret}
     hikari:
@@ -27,7 +33,7 @@ spring:
       enabled: true
 
 server:
-  port: 8035
+  port: ${SERVER_PORT:8035}
   address: 0.0.0.0
 
 logging:

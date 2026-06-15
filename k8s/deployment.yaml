@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: trains-service
 spec:
+  replicas: 2
   revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
@@ -18,51 +19,72 @@ spec:
         app: trains-service
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8035"
+        prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: trains-service
-          image: trains-service:latest
+          image: your-registry/trains-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8035
+              containerPort: 8080
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: trains-service-config
           env:
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: trains-service-config
+                  key: SPRING_KAFKA_BOOTSTRAP_SERVERS
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              valueFrom:
+                configMapKeyRef:
+                  name: trains-service-config
+                  key: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: trains-service-config
+                  key: SERVER_PORT
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: trains-service-config
+                  key: SPRING_PROFILES_ACTIVE
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trains-service-secret
+                  key: DB_URL
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: trains-service-secret
+                  key: DB_USERNAME
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: trains-service-secret
                   key: DB_PASSWORD
-                  optional: true
             - name: JAVA_TOOL_OPTIONS
               value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=40.0"
           resources:
             requests:
               cpu: "250m"
-              memory: "512Mi"
+              memory: "256Mi"
             limits:
-              cpu: "2000m"
-              memory: "1536Mi"
-          startupProbe:
-            httpGet:
-              path: /actuator/health/liveness
-              port: http
-            failureThreshold: 30
-            periodSeconds: 5
+              cpu: "500m"
+              memory: "512Mi"
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
-            initialDelaySeconds: 0
+            initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 3
             failureThreshold: 3
@@ -70,7 +92,7 @@ spec:
             httpGet:
               path: /actuator/health/readiness
               port: http
-            initialDelaySeconds: 0
+            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3

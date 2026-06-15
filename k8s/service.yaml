@@ -8,6 +8,6 @@ spec:
     app: trains-service
   ports:
     - name: http
-      port: 8035
+      port: 8080
       targetPort: http
       protocol: TCP

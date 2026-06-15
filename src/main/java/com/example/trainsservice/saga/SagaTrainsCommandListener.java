@@ -2,12 +2,13 @@ package com.example.trainsservice.saga;
 
 import com.example.trainsservice.model.OutboxEvent;
 import com.example.trainsservice.model.Train;
-import com.example.trainsservice.repository.OutboxEventRepository;
 import com.example.trainsservice.repository.TrainRepository;
+import com.example.trainsservice.service.messaging.OutboxEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,13 +26,13 @@ public class SagaTrainsCommandListener {
     private static final String PERSONAL_CABINET = "PERSONAL_CABINET";
 
     private final TrainRepository trainRepository;
-    private final OutboxEventRepository outboxEventRepository;
+    private final OutboxEventService outboxEventService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "saga-trains-command", containerFactory = "sagaKafkaListenerContainerFactory",
             groupId = "trains-service-saga")
     @Transactional
-    public void onCommand(SagaCommandEvent event) {
+    public void onCommand(SagaCommandEvent event, Acknowledgment acknowledgment) {
         log.info("Received saga-trains-command: sagaId={}, status={}", event.getSagaId(), event.getStatus());
 
         if ("ROLLBACK".equals(event.getStatus())) {
@@ -47,6 +48,9 @@ public class SagaTrainsCommandListener {
         String userId = data != null ? String.valueOf(data.get("userId")) : null;
         if (userId == null || "null".equals(userId)) {
             publishResponse(event, "FAILED", Map.of("reason", "userId missing in payload"));
+            if (acknowledgment != null) {
+                acknowledgment.acknowledge();
+            }
             return;
         }
 
@@ -63,6 +67,9 @@ public class SagaTrainsCommandListener {
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("trainId", cabinet.getId());
         publishResponse(event, "SUCCESS", responseData);
+        if (acknowledgment != null) {
+            acknowledgment.acknowledge();
+        }
     }
 
     private void handleRollback(SagaCommandEvent event) {
@@ -90,10 +97,13 @@ public class SagaTrainsCommandListener {
             response.setData(data);
 
             OutboxEvent outboxEvent = new OutboxEvent();
+            outboxEvent.setAggregateType("saga-response");
+            outboxEvent.setAggregateId(command.getSagaId());
+            outboxEvent.setEventType("SAGA_RESPONSE");
             outboxEvent.setTopic("saga-trains-response");
             outboxEvent.setKey(command.getSagaId());
             outboxEvent.setPayload(objectMapper.writeValueAsString(response));
-            outboxEventRepository.save(outboxEvent);
+            outboxEventService.saveEvent(outboxEvent);
         } catch (Exception e) {
             log.error("Failed to publish saga-trains-response: {}", e.getMessage(), e);
         }
