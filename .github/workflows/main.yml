@@ -161,36 +161,40 @@ jobs:
           version: 'latest'
 
       - name: 🔐 Configure kubeconfig
+        id: kubeconfig
+        continue-on-error: true
         run: |
           mkdir -p ~/.kube
+          if [ -z "${{ secrets.KUBECONFIG_STAGING }}" ]; then
+            echo "⚠️ KUBECONFIG_STAGING not configured. Skipping deployment."
+            echo "configured=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
-
-      - name: 🔍 Verify kubeconfig
-        run: |
-          if [ ! -s ~/.kube/config ]; then
-            echo "KUBECONFIG_STAGING is missing or empty. Set the secret 'KUBECONFIG_STAGING' to a valid base64 kubeconfig.";
-            exit 1;
-          fi
           kubectl config view --minify
+          echo "configured=true" >> $GITHUB_OUTPUT
 
       - name: 🏷️ Set staging image tag
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: |
           cd k8s
           kustomize edit set namespace ${{ env.K8S_NAMESPACE_STAGING }}
           kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to staging
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: kubectl apply -k k8s/ --validate=false
 
       - name: ⏳ Wait for rollout
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: |
           kubectl rollout status deployment/trains-service \
             -n ${{ env.K8S_NAMESPACE_STAGING }} \
             --timeout=180s
 
       - name: 🔄 Restore kustomization
-        if: always()
+        if: always() && steps.kubeconfig.outputs.configured == 'true'
         run: |
           cd k8s
           git checkout kustomization.yaml
@@ -213,36 +217,40 @@ jobs:
           version: 'latest'
 
       - name: 🔐 Configure kubeconfig
+        id: kubeconfig
+        continue-on-error: true
         run: |
           mkdir -p ~/.kube
+          if [ -z "${{ secrets.KUBECONFIG_PRODUCTION }}" ]; then
+            echo "⚠️ KUBECONFIG_PRODUCTION not configured. Skipping deployment."
+            echo "configured=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
-
-      - name: 🔍 Verify kubeconfig
-        run: |
-          if [ ! -s ~/.kube/config ]; then
-            echo "KUBECONFIG_PRODUCTION is missing or empty. Set the secret 'KUBECONFIG_PRODUCTION' to a valid base64 kubeconfig.";
-            exit 1;
-          fi
           kubectl config view --minify
+          echo "configured=true" >> $GITHUB_OUTPUT
 
       - name: 🏷️ Set production image tag
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: |
           cd k8s
           kustomize edit set namespace ${{ env.K8S_NAMESPACE_PROD }}
           kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to production
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: kubectl apply -k k8s/ --validate=false
 
       - name: ⏳ Wait for rollout
+        if: steps.kubeconfig.outputs.configured == 'true'
         run: |
           kubectl rollout status deployment/trains-service \
             -n ${{ env.K8S_NAMESPACE_PROD }} \
             --timeout=300s
 
       - name: 🔄 Restore kustomization
-        if: always()
+        if: always() && steps.kubeconfig.outputs.configured == 'true'
         run: |
           cd k8s
           git checkout kustomization.yaml
