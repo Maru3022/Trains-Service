@@ -5,6 +5,12 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      deploy-production:
+        description: 'Deploy latest image to production'
+        required: false
+        default: 'false'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,10 +19,9 @@ concurrency:
 env:
   JAVA_VERSION: '21'
   IMAGE_NAME: docker.io/maru3022/trains-service
+  K8S_NAMESPACE_STAGING: trains-service-staging
+  K8S_NAMESPACE_PROD: trains-service
 
-# ─────────────────────────────────────────────
-# JOB 1 — Build & Unit Tests
-# ─────────────────────────────────────────────
 jobs:
   build:
     name: 🔨 Build & Unit Tests
@@ -35,8 +40,16 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: 🧪 Build & run unit tests
-        run: ./mvnw -B -Dspring.profiles.active=test clean verify
+      - name: 📦 Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: 🧪 Build and run unit tests
+        run: ./mvnw -B -Dspring.profiles.active=test clean package
 
       - name: 📦 Upload JAR artifact
         uses: actions/upload-artifact@v4
@@ -45,48 +58,12 @@ jobs:
           path: target/*.jar
           retention-days: 1
 
-  # ─────────────────────────────────────────────
-  # JOB 2 — Integration Tests
-  # ─────────────────────────────────────────────
   integration-tests:
     name: 🔗 Integration Tests
     runs-on: ubuntu-latest
     needs: build
     permissions:
       contents: read
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: trains_db
-          POSTGRES_USER: trains_user
-          POSTGRES_PASSWORD: secret
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      kafka:
-        image: bitnami/kafka:3.7
-        env:
-          KAFKA_CFG_NODE_ID: 1
-          KAFKA_CFG_PROCESS_ROLES: broker,controller
-          KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-          KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-          KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-          KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-        ports:
-          - 9092:9092
-        options: >-
-          --health-cmd "kafka-topics.sh --bootstrap-server localhost:9092 --list"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 10
 
     steps:
       - name: 📥 Checkout code
@@ -99,7 +76,13 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: 🔗 Run integration tests
+      - name: 📦 Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: target/
+
+      - name: 🧪 Run integration tests
         run: ./mvnw -B -Dspring.profiles.active=test verify -Dsurefire.failIfNoSpecifiedTests=false
         env:
           DB_URL: jdbc:postgresql://localhost:5432/trains_db
@@ -107,19 +90,13 @@ jobs:
           DB_PASSWORD: secret
           SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
 
-  # ─────────────────────────────────────────────
-  # JOB 3 — Docker Build & Push (только main)
-  # ─────────────────────────────────────────────
-  docker:
-    name: 🐳 Docker Build & Push
+  package:
+    name: 🧱 Package Docker Image
     runs-on: ubuntu-latest
     needs: [ build, integration-tests ]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: 📥 Checkout code
@@ -137,39 +114,30 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🏷️ Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=,format=short
-            type=raw,value=latest
-
       - name: 🛠️ Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🐳 Build & push image
+      - name: 🐳 Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
-  # ─────────────────────────────────────────────
-  # JOB 4 — Deploy to Staging (namespace: trains-service-staging)
-  # ─────────────────────────────────────────────
   deploy-staging:
-    name: 🚀 Deploy → Staging
+    name: 🚀 Deploy to Staging
     runs-on: ubuntu-latest
-    needs: docker
+    needs: package
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: staging
-      url: http://trains-service.staging.svc.cluster.local
 
     steps:
       - name: 📥 Checkout code
@@ -183,42 +151,37 @@ jobs:
       - name: 🔐 Configure kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
-      - name: 🏷️ Update image tag in kustomization (staging)
+      - name: 🏷️ Set staging image tag
         run: |
           cd k8s
-          # Переопределяем namespace и тег для staging
-          kustomize edit set namespace trains-service-staging
-          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+          kustomize edit set namespace ${{ env.K8S_NAMESPACE_STAGING }}
+          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: 🚀 Apply manifests to staging
+      - name: 🚀 Deploy to staging
         run: kubectl apply -k k8s/
 
-      - name: ⏳ Wait for rollout (staging)
+      - name: ⏳ Wait for rollout
         run: |
           kubectl rollout status deployment/trains-service \
-            -n trains-service-staging \
+            -n ${{ env.K8S_NAMESPACE_STAGING }} \
             --timeout=180s
 
-      - name: 🔄 Restore kustomization to defaults
+      - name: 🔄 Restore kustomization
         if: always()
         run: |
           cd k8s
           git checkout kustomization.yaml
 
-  # ─────────────────────────────────────────────
-  # JOB 5 — Deploy to Production (namespace: trains-service)
-  # ─────────────────────────────────────────────
-  deploy-prod:
-    name: 🏁 Deploy → Production
+  deploy-production:
+    name: 🏁 Deploy to Production
     runs-on: ubuntu-latest
-    needs: [ docker, deploy-staging ]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: package
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy-production == 'true'
     environment:
       name: production
-      url: http://trains-service.trains-service.svc.cluster.local
 
     steps:
       - name: 📥 Checkout code
@@ -232,31 +195,27 @@ jobs:
       - name: 🔐 Configure kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
-      - name: 🏷️ Update image tag in kustomization (prod)
+      - name: 🏷️ Set production image tag
         run: |
           cd k8s
-          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+          kustomize edit set namespace ${{ env.K8S_NAMESPACE_PROD }}
+          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: 🚀 Apply manifests to production
+      - name: 🚀 Deploy to production
         run: kubectl apply -k k8s/
 
-      - name: ⏳ Wait for rollout (prod)
+      - name: ⏳ Wait for rollout
         run: |
           kubectl rollout status deployment/trains-service \
-            -n trains-service \
+            -n ${{ env.K8S_NAMESPACE_PROD }} \
             --timeout=300s
 
-      - name: 🔄 Restore kustomization to defaults
+      - name: 🔄 Restore kustomization
         if: always()
         run: |
           cd k8s
           git checkout kustomization.yaml
 
-      - name: 🔔 Notify on failure
-        if: failure()
-        run: |
-          echo "::error::Production deploy failed! Rolling back..."
-          kubectl rollout undo deployment/trains-service -n trains-service
