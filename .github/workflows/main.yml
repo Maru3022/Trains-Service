@@ -1,199 +1,35 @@
-name: Java CI/CD
+﻿name: Java CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/trains-service
   JAVA_VERSION: '21'
 
 jobs:
-  build-and-test:
+  build:
     name: 🔨 Build & Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      checks: write
-      pull-requests: write
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
+
       - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          distribution: temurin
           cache: maven
-      - name: 🧪 Run Unit Tests
-        run: mvn clean test -Dspring.profiles.active=test
-      - name: 📊 Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2.23.0
-        if: always()
-        with:
-          files: target/surefire-reports/*.xml
-          check_run: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-          comment_mode: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'always' || 'off' }}
-      - name: 🏗️ Build with Maven (skip tests)
-        run: mvn clean package -DskipTests
-      - name: 📤 Upload JAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: trains-service-jar
-          path: target/*.jar
-          retention-days: 7
 
-  code-quality:
-    name: 🔎 Code Quality
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    permissions:
-      contents: read
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-      - name: 🔐 Run OWASP Dependency Check
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      - name: 🧪 Build and run unit tests
         run: |
-          set +e
-          mvn -B org.owasp:dependency-check-maven:12.1.2:check \
-            -DfailBuildOnCVSS=11 \
-            -Dformats=HTML,JSON \
-            -DretireJsAnalyzerEnabled=false
-          exit 0
-
-  kubernetes-ci:
-    name: ☸️ Kubernetes manifests
-    runs-on: ubuntu-latest
-    needs: [ build-and-test ]
-    permissions:
-      contents: read
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-      - name: 🔧 Kustomize validation
-        run: |
-          # Используем только kustomize build, чтобы проверить корректность манифестов 
-          # без обращения к API-серверу Kubernetes (устраняет ошибку connection refused)
-          kubectl kustomize k8s/ > /dev/null
-
-  docker-build-push:
-    name: 🐳 Docker Build & Push
-    runs-on: ubuntu-latest
-    needs: [ build-and-test, code-quality, kubernetes-ci ]
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    steps:
-      - name: Normalise GHCR image name
-        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service" >> "$GITHUB_ENV"
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-      - name: 📥 Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: trains-service-jar
-          path: target/
-      - name: 🔑 Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 🐳 Build and Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-
-  kubernetes-deploy:
-    name: ☸️ Deploy to Kubernetes
-    runs-on: ubuntu-latest
-    needs: [ docker-build-push ]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    env:
-      KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
-    steps:
-      - name: ℹ️ Skip hint
-        if: ${{ env.KUBE_CONFIG_B64 == '' }}
-        run: echo "::notice::Kubernetes deploy skipped — add secret KUBE_CONFIG_B64."
-      - name: 📥 Checkout code
-        if: ${{ env.KUBE_CONFIG_B64 != '' }}
-        uses: actions/checkout@v4
-      - name: 🔧 Install kubectl
-        if: ${{ env.KUBE_CONFIG_B64 != '' }}
-        uses: azure/setup-kubectl@v4
-      - name: 🔐 Configure kubeconfig
-        if: ${{ env.KUBE_CONFIG_B64 != '' }}
-        run: |
-          mkdir -p "${HOME}/.kube"
-          echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "${HOME}/.kube/config"
-      - name: ☸️ Apply & rollout
-        if: ${{ env.KUBE_CONFIG_B64 != '' }}
-        run: |
-          IMAGE="${{ env.REGISTRY }}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/trains-service:latest"
-          kubectl apply -k k8s/
-          kubectl -n trains-service set image deployment/trains-service trains-service="${IMAGE}"
-
-  deploy-staging:
-    name: 🧪 Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: docker-build-push
-    if: ${{ github.ref == 'refs/heads/develop' }}
-    env:
-      STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-    steps:
-      - name: Skip check
-        if: ${{ env.STAGING_SSH_KEY == '' }}
-        run: echo "Skipping staging."
-      - name: 🔑 Set up SSH key
-        if: ${{ env.STAGING_SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
-
-  deploy-production:
-    name: 🚀 Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [ docker-build-push ]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    env:
-      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-    steps:
-      - name: Skip check
-        if: ${{ env.PROD_SSH_KEY == '' }}
-        run: echo "Skipping production."
-
-  notify:
-    name: 📣 Notify
-    runs-on: ubuntu-latest
-    needs: [ kubernetes-deploy, deploy-production ]
-    if: always()
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-    steps:
-      - name: 🔴 Notify on Failure
-        if: ${{ (needs.kubernetes-deploy.result == 'failure' || needs.deploy-production.result == 'failure') && env.SLACK_WEBHOOK_URL != '' }}
-        uses: slackapi/slack-github-action@v2
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload: '{"text": "❌ Деплой упал!"}'
+          ./mvnw -B -Dspring.profiles.active=test clean verify
