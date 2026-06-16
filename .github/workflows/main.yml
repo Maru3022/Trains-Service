@@ -1,4 +1,4 @@
-﻿name: Java CI
+﻿name: Java CI/CD
 
 on:
   push:
@@ -12,13 +12,18 @@ concurrency:
 
 env:
   JAVA_VERSION: '21'
+  IMAGE_NAME: docker.io/maru3022/trains-service
 
+# ─────────────────────────────────────────────
+# JOB 1 — Build & Unit Tests
+# ─────────────────────────────────────────────
 jobs:
   build:
-    name: 🔨 Build & Test
+    name: 🔨 Build & Unit Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -30,6 +35,228 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: 🧪 Build and run unit tests
+      - name: 🧪 Build & run unit tests
+        run: ./mvnw -B -Dspring.profiles.active=test clean verify
+
+      - name: 📦 Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 1
+
+  # ─────────────────────────────────────────────
+  # JOB 2 — Integration Tests
+  # ─────────────────────────────────────────────
+  integration-tests:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: trains_db
+          POSTGRES_USER: trains_user
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      kafka:
+        image: bitnami/kafka:3.7
+        env:
+          KAFKA_CFG_NODE_ID: 1
+          KAFKA_CFG_PROCESS_ROLES: broker,controller
+          KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: 🔗 Run integration tests
+        run: ./mvnw -B -Dspring.profiles.active=test verify -Dsurefire.failIfNoSpecifiedTests=false
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/trains_db
+          DB_USERNAME: trains_user
+          DB_PASSWORD: secret
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+
+  # ─────────────────────────────────────────────
+  # JOB 3 — Docker Build & Push (только main)
+  # ─────────────────────────────────────────────
+  docker:
+    name: 🐳 Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [ build, integration-tests ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: target/
+
+      - name: 🔑 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🏷️ Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: 🛠️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🐳 Build & push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  # ─────────────────────────────────────────────
+  # JOB 4 — Deploy to Staging (namespace: trains-service-staging)
+  # ─────────────────────────────────────────────
+  deploy-staging:
+    name: 🚀 Deploy → Staging
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: http://trains-service.staging.svc.cluster.local
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: 🔐 Configure kubeconfig
         run: |
-          ./mvnw -B -Dspring.profiles.active=test clean verify
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: 🏷️ Update image tag in kustomization (staging)
+        run: |
+          cd k8s
+          # Переопределяем namespace и тег для staging
+          kustomize edit set namespace trains-service-staging
+          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+
+      - name: 🚀 Apply manifests to staging
+        run: kubectl apply -k k8s/
+
+      - name: ⏳ Wait for rollout (staging)
+        run: |
+          kubectl rollout status deployment/trains-service \
+            -n trains-service-staging \
+            --timeout=180s
+
+      - name: 🔄 Restore kustomization to defaults
+        if: always()
+        run: |
+          cd k8s
+          git checkout kustomization.yaml
+
+  # ─────────────────────────────────────────────
+  # JOB 5 — Deploy to Production (namespace: trains-service)
+  # ─────────────────────────────────────────────
+  deploy-prod:
+    name: 🏁 Deploy → Production
+    runs-on: ubuntu-latest
+    needs: [ docker, deploy-staging ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: http://trains-service.trains-service.svc.cluster.local
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: 🔐 Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: 🏷️ Update image tag in kustomization (prod)
+        run: |
+          cd k8s
+          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+
+      - name: 🚀 Apply manifests to production
+        run: kubectl apply -k k8s/
+
+      - name: ⏳ Wait for rollout (prod)
+        run: |
+          kubectl rollout status deployment/trains-service \
+            -n trains-service \
+            --timeout=300s
+
+      - name: 🔄 Restore kustomization to defaults
+        if: always()
+        run: |
+          cd k8s
+          git checkout kustomization.yaml
+
+      - name: 🔔 Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Production deploy failed! Rolling back..."
+          kubectl rollout undo deployment/trains-service -n trains-service
