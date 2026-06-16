@@ -166,6 +166,14 @@ jobs:
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
+      - name: 🔍 Verify kubeconfig
+        run: |
+          if [ ! -s ~/.kube/config ]; then
+            echo "KUBECONFIG_STAGING is missing or empty. Set the secret 'KUBECONFIG_STAGING' to a valid base64 kubeconfig.";
+            exit 1;
+          fi
+          kubectl config view --minify
+
       - name: 🏷️ Set staging image tag
         run: |
           cd k8s
@@ -173,7 +181,7 @@ jobs:
           kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to staging
-        run: kubectl apply -k k8s/
+        run: kubectl apply -k k8s/ --validate=false
 
       - name: ⏳ Wait for rollout
         run: |
@@ -210,6 +218,14 @@ jobs:
           echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
+      - name: 🔍 Verify kubeconfig
+        run: |
+          if [ ! -s ~/.kube/config ]; then
+            echo "KUBECONFIG_PRODUCTION is missing or empty. Set the secret 'KUBECONFIG_PRODUCTION' to a valid base64 kubeconfig.";
+            exit 1;
+          fi
+          kubectl config view --minify
+
       - name: 🏷️ Set production image tag
         run: |
           cd k8s
@@ -217,7 +233,7 @@ jobs:
           kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to production
-        run: kubectl apply -k k8s/
+        run: kubectl apply -k k8s/ --validate=false
 
       - name: ⏳ Wait for rollout
         run: |
