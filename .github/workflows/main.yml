@@ -18,7 +18,6 @@ concurrency:
 
 env:
   JAVA_VERSION: '21'
-  IMAGE_NAME: ghcr.io/${{ toLower(github.repository_owner) }}/trains-service
   K8S_NAMESPACE_STAGING: trains-service-staging
   K8S_NAMESPACE_PROD: trains-service
 
@@ -98,6 +97,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_name: ${{ steps.set-image.outputs.image_name }}
 
     steps:
       - name: 📥 Checkout code
@@ -108,6 +109,15 @@ jobs:
         with:
           name: app-jar
           path: target/
+
+      - name: 🏷️ Set image name (lowercase owner)
+        id: set-image
+        run: |
+          OWNER=${GITHUB_REPOSITORY%%/*}
+          OWNER_LOWER=$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=ghcr.io/${OWNER_LOWER}/trains-service
+          echo "image_name=${IMAGE}" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=${IMAGE}" >> $GITHUB_ENV
 
       - name: 🔑 Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -160,7 +170,7 @@ jobs:
         run: |
           cd k8s
           kustomize edit set namespace ${{ env.K8S_NAMESPACE_STAGING }}
-          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to staging
         run: kubectl apply -k k8s/
@@ -204,7 +214,7 @@ jobs:
         run: |
           cd k8s
           kustomize edit set namespace ${{ env.K8S_NAMESPACE_PROD }}
-          kustomize edit set image trains-service=${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kustomize edit set image trains-service=${{ needs.package.outputs.image_name }}:${{ github.sha }}
 
       - name: 🚀 Deploy to production
         run: kubectl apply -k k8s/
