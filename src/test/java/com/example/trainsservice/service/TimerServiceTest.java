@@ -23,6 +23,11 @@ class TimerServiceTest {
     }
 
     @Test
+    void getRestTime_null_returnsDefault() {
+        assertEquals(60, timerService.getRestTime(null).getSeconds());
+    }
+
+    @Test
     void getRestTime_light_returns60() {
         RestTimerResponseDTO dto = timerService.getRestTime("light");
         assertEquals(60, dto.getSeconds());

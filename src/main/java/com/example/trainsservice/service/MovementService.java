@@ -8,6 +8,7 @@ import com.example.trainsservice.repository.TrainRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ public class MovementService {
     private final ProgressRepository progressRepository;
     private final TrainRepository trainRepository;
 
+    @Transactional
     public void registerSet(
             ProgressUpdateDTO dto
     ){

@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/progress")
+@RequestMapping("/api/v1/progress")
 public class ProgressController {
     private final MovementService movementService;
 

@@ -12,9 +12,7 @@ public class TimerService {
             String intensity
     ){
         log.info("Fetching rest time for intensity level: {} ", intensity);
-        int seconds = intensity.equalsIgnoreCase("heavy") ? 100 : 60;
-
-        System.out.println("DEBUG: Timer set to " + seconds + " seconds.");
+        int seconds = "heavy".equalsIgnoreCase(intensity) ? 100 : 60;
 
         return new RestTimerResponseDTO(seconds,"Rest for " + (seconds / 60) + " minutes.");
     }
