@@ -36,10 +36,10 @@ class TrainServiceTest {
 
     @Test
     void getAllTrains_returnsList() {
-        when(trainRepository.findAll()).thenReturn(List.of(new Train()));
-        List<Train> result = trainService.getAllTrains();
+        when(trainRepository.findAllByUserId("user-1")).thenReturn(List.of(new Train()));
+        List<Train> result = trainService.getAllTrains("user-1");
         assertEquals(1, result.size());
-        verify(trainRepository).findAll();
+        verify(trainRepository).findAllByUserId("user-1");
     }
 
     @Test
@@ -60,17 +60,17 @@ class TrainServiceTest {
 
     @Test
     void deleteTrain_notFound_throws() {
-        when(trainRepository.findById(10L)).thenReturn(Optional.empty());
-        assertThrows(EntityNotFoundException.class, () -> trainService.deleteTrain(10L));
+        when(trainRepository.findByIdAndUserId(10L, "user-1")).thenReturn(Optional.empty());
+        assertThrows(EntityNotFoundException.class, () -> trainService.deleteTrain(10L, "user-1"));
     }
 
     @Test
     void deleteTrain_success_callsDeleteAndEvent() {
         Train t = new Train();
         t.setId(3L);
-        when(trainRepository.findById(3L)).thenReturn(Optional.of(t));
+        when(trainRepository.findByIdAndUserId(3L, "user-1")).thenReturn(Optional.of(t));
 
-        trainService.deleteTrain(3L);
+        trainService.deleteTrain(3L, "user-1");
 
         verify(trainRepository).deleteById(3L);
         ArgumentCaptor<TrainEventDTO> captor = ArgumentCaptor.forClass(TrainEventDTO.class);

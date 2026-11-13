@@ -23,6 +23,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -43,27 +45,27 @@ public class TrainControllerTest {
     @Test
     void getTrainById_WhenFound_ShouldReturnTrain() throws Exception {
         Train train = new Train();
-        when(trainService.getTrainById(1L))
+        when(trainService.getTrainById(1L, "user-1"))
                 .thenReturn(Optional.of(train));
 
-        mockMvc.perform(get("/api/v1/plans/1"))
+        mockMvc.perform(get("/api/v1/plans/1").header("X-User-Id", "user-1"))
                 .andExpect(status().isOk());
     }
 
     @Test
     void getTrainById_WhenNotFound_ShouldReturnTrain() throws Exception {
-        when(trainService.getTrainById(1L)).thenReturn(Optional.empty());
+        when(trainService.getTrainById(1L, "user-1")).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/v1/plans/1"))
+        mockMvc.perform(get("/api/v1/plans/1").header("X-User-Id", "user-1"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void getTrains_WhenCalled_ShouldReturnList() throws Exception {
         Train train = new Train();
-        when(trainService.getAllTrains()).thenReturn(List.of(train));
+        when(trainService.getAllTrains("user-1")).thenReturn(List.of(train));
 
-        mockMvc.perform(get("/api/v1/plans"))
+        mockMvc.perform(get("/api/v1/plans").header("X-User-Id", "user-1"))
                 .andExpect(status().isOk());
     }
 
@@ -89,6 +91,35 @@ public class TrainControllerTest {
     @Test
     void deleteTrain_ShouldReturnNoContent() throws Exception {
         mockMvc.perform(delete("/api/v1/plans/1"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(delete("/api/v1/plans/1").header("X-User-Id", "user-1"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void getTrainById_DifferentUser_ShouldNotExposePlan() throws Exception {
+        Train victimPlan = new Train();
+        victimPlan.setId(1L);
+        victimPlan.setUserId("victim");
+        when(trainService.getTrainById(1L, "attacker")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/plans/1")
+                        .header("X-User-Id", "attacker"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteTrain_DifferentUser_ShouldNotDeletePlan() throws Exception {
+        Train victimPlan = new Train();
+        victimPlan.setId(1L);
+        victimPlan.setUserId("victim");
+        doThrow(new jakarta.persistence.EntityNotFoundException()).when(trainService).deleteTrain(1L, "attacker");
+
+        mockMvc.perform(delete("/api/v1/plans/1")
+                        .header("X-User-Id", "attacker"))
+                .andExpect(status().isNotFound());
+
+        verify(trainService).deleteTrain(1L, "attacker");
     }
 }

@@ -17,15 +17,16 @@ public class TrainController {
     private final TrainService trainService;
 
     @GetMapping
-    public List<Train> getTrains(){
-        return trainService.getAllTrains();
+    public List<Train> getTrains(@RequestHeader("X-User-Id") String userId){
+        return trainService.getAllTrains(userId);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Train> getTrainById(
             @PathVariable Long id
+            , @RequestHeader("X-User-Id") String userId
     ){
-        return trainService.getTrainById(id)
+        return trainService.getTrainById(id, userId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -45,8 +46,9 @@ public class TrainController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTrain(
             @PathVariable Long id
+            , @RequestHeader("X-User-Id") String userId
     ){
-        trainService.deleteTrain(id);
+        trainService.deleteTrain(id, userId);
         return ResponseEntity.noContent().build();
     }
 }

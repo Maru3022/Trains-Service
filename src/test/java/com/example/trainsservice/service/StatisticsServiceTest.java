@@ -25,10 +25,10 @@ class StatisticsServiceTest {
 
     @Test
     void getTrainingSummary_returnsCountsAndVolume() {
-        when(progressRepository.count()).thenReturn(10L);
-        when(progressRepository.sumVolume()).thenReturn(1234.5);
+        when(progressRepository.countByTrainUserId("user-1")).thenReturn(10L);
+        when(progressRepository.sumVolumeByUserId("user-1")).thenReturn(1234.5);
 
-        StatsSummaryResponse res = statisticsService.getTrainingSummary();
+        StatsSummaryResponse res = statisticsService.getTrainingSummary("user-1");
         assertEquals(10L, res.loggedSetsCount());
         assertEquals(1234.5, res.totalVolume());
     }

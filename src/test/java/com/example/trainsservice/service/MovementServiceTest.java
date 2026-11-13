@@ -36,23 +36,24 @@ class MovementServiceTest {
     void registerSet_savesProgress() {
         Train train = new Train();
         train.setId(7L);
-        when(trainRepository.findById(7L)).thenReturn(Optional.of(train));
+        train.setUserId("user-1");
+        when(trainRepository.findByIdAndUserId(7L, "user-1")).thenReturn(Optional.of(train));
 
         ProgressUpdateDTO dto = new ProgressUpdateDTO();
         dto.setExerciseId(7L);
         dto.setReps(5);
         dto.setWeight(100.0);
 
-        movementService.registerSet(dto);
+        movementService.registerSet(dto, "user-1");
 
         verify(progressRepository).save(any(Progress.class));
     }
 
     @Test
     void registerSet_missingTrain_throws() {
-        when(trainRepository.findById(99L)).thenReturn(Optional.empty());
+        when(trainRepository.findByIdAndUserId(99L, "user-1")).thenReturn(Optional.empty());
         ProgressUpdateDTO dto = new ProgressUpdateDTO();
         dto.setExerciseId(99L);
-        assertThrows(EntityNotFoundException.class, () -> movementService.registerSet(dto));
+        assertThrows(EntityNotFoundException.class, () -> movementService.registerSet(dto, "user-1"));
     }
 }
