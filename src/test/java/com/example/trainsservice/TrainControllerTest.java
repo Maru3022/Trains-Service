@@ -46,7 +46,7 @@ public class TrainControllerTest {
         when(trainService.getTrainById(1L))
                 .thenReturn(Optional.of(train));
 
-        mockMvc.perform(get("/api/trains/1"))
+        mockMvc.perform(get("/api/v1/plans/1"))
                 .andExpect(status().isOk());
     }
 
@@ -54,7 +54,7 @@ public class TrainControllerTest {
     void getTrainById_WhenNotFound_ShouldReturnTrain() throws Exception {
         when(trainService.getTrainById(1L)).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/trains/1"))
+        mockMvc.perform(get("/api/v1/plans/1"))
                 .andExpect(status().isNotFound());
     }
 
@@ -63,7 +63,7 @@ public class TrainControllerTest {
         Train train = new Train();
         when(trainService.getAllTrains()).thenReturn(List.of(train));
 
-        mockMvc.perform(get("/api/trains"))
+        mockMvc.perform(get("/api/v1/plans"))
                 .andExpect(status().isOk());
     }
 
@@ -76,7 +76,7 @@ public class TrainControllerTest {
 
         when(trainService.saveTrain(org.mockito.ArgumentMatchers.any(Train.class))).thenReturn(saved);
 
-        mockMvc.perform(post("/api/trains")
+        mockMvc.perform(post("/api/v1/plans")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isCreated())
@@ -88,7 +88,7 @@ public class TrainControllerTest {
 
     @Test
     void deleteTrain_ShouldReturnNoContent() throws Exception {
-        mockMvc.perform(delete("/api/trains/1"))
+        mockMvc.perform(delete("/api/v1/plans/1"))
                 .andExpect(status().isNoContent());
     }
 }
