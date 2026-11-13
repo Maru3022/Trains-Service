@@ -11,9 +11,9 @@ public class StatisticsService {
 
     private final ProgressRepository progressRepository;
 
-    public StatsSummaryResponse getTrainingSummary() {
-        long sets = progressRepository.count();
-        double volume = progressRepository.sumVolume();
+    public StatsSummaryResponse getTrainingSummary(String userId) {
+        long sets = progressRepository.countByTrainUserId(userId);
+        double volume = progressRepository.sumVolumeByUserId(userId);
         return new StatsSummaryResponse(sets, volume);
     }
 

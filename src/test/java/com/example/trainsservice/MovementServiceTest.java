@@ -27,9 +27,9 @@ public class MovementServiceTest {
     @Test
     void shouldRegisterSetSuccessfully(){
         ProgressUpdateDTO dto = new ProgressUpdateDTO(1L, 10,100.0);
-        when(trainRepository.findById(1L)).thenReturn(Optional.of(new Train()));
+        when(trainRepository.findByIdAndUserId(1L, "user-1")).thenReturn(Optional.of(new Train()));
 
-        movementService.registerSet(dto);
+        movementService.registerSet(dto, "user-1");
 
         verify(progressRepository, times(1)).save(any());
     }
@@ -37,9 +37,9 @@ public class MovementServiceTest {
     @Test
     void shouldThrowWhenTrainMissing() {
         ProgressUpdateDTO dto = new ProgressUpdateDTO(99L, 5, 50.0);
-        when(trainRepository.findById(99L)).thenReturn(Optional.empty());
+        when(trainRepository.findByIdAndUserId(99L, "user-1")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> movementService.registerSet(dto))
+        assertThatThrownBy(() -> movementService.registerSet(dto, "user-1"))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("99");
     }

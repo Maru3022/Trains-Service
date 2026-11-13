@@ -22,9 +22,10 @@ public class MovementService {
 
     @Transactional
     public void registerSet(
-            ProgressUpdateDTO dto
+            ProgressUpdateDTO dto,
+            String userId
     ){
-        Train train = trainRepository.findById(dto.getExerciseId())
+        Train train = trainRepository.findByIdAndUserId(dto.getExerciseId(), userId)
                 .orElseThrow(() -> new EntityNotFoundException("Train not found with id: " + dto.getExerciseId()));
 
         Progress progress = new Progress();

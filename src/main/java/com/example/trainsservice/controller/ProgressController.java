@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
 @RequiredArgsConstructor
@@ -16,8 +17,9 @@ public class ProgressController {
     private final MovementService movementService;
 
     @PostMapping("/log")
-    public ResponseEntity<String> logExercise(@RequestBody ProgressUpdateDTO dto) {
-        movementService.registerSet(dto);
+    public ResponseEntity<String> logExercise(@RequestHeader("X-User-Id") String userId,
+                                              @RequestBody ProgressUpdateDTO dto) {
+        movementService.registerSet(dto, userId);
         return ResponseEntity.ok("Workout progress has been successfully logged.");
     }
 }

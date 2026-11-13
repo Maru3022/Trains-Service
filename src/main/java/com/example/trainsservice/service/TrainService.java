@@ -20,8 +20,8 @@ public class TrainService {
     private final TrainRepository trainRepository;
     private final TrainEventProducer trainEventProducer;
 
-    public List<Train> getAllTrains(){
-        return trainRepository.findAll();
+    public List<Train> getAllTrains(String userId){
+        return trainRepository.findAllByUserId(userId);
     }
 
     @Transactional
@@ -33,13 +33,13 @@ public class TrainService {
         return savedTrain;
     }
 
-    public Optional<Train> getTrainById(Long id){
-        return trainRepository.findById(id);
+    public Optional<Train> getTrainById(Long id, String userId){
+        return trainRepository.findByIdAndUserId(id, userId);
     }
 
     @Transactional
-    public void deleteTrain(Long id){
-        trainRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Train with id " + id + " not found"));
+    public void deleteTrain(Long id, String userId){
+        trainRepository.findByIdAndUserId(id, userId).orElseThrow(() -> new EntityNotFoundException("Train with id " + id + " not found"));
         trainRepository.deleteById(id);
         // Send event
         TrainEventDTO event = new TrainEventDTO(id.toString(), TrainEventType.DELETED.name());

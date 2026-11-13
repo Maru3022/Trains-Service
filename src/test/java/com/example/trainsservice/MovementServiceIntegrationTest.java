@@ -44,13 +44,14 @@ public class MovementServiceIntegrationTest {
         testTrain.setName("Test Train");
         testTrain.setCategory("Test");
         testTrain.setDurationMinutes(60);
+        testTrain.setUserId("user-1");
         testTrain = trainRepository.save(testTrain);
     }
 
     @Test
     void testRegisterSetSuccessfully() {
         ProgressUpdateDTO dto = new ProgressUpdateDTO(testTrain.getId(), 10, 100.0);
-        movementService.registerSet(dto);
+        movementService.registerSet(dto, "user-1");
         var allProgress = progressRepository.findAll();
         assertThat(allProgress).isNotEmpty();
     }
@@ -58,7 +59,7 @@ public class MovementServiceIntegrationTest {
     @Test
     void testRegisterSetWithInvalidTrainId() {
         ProgressUpdateDTO dto = new ProgressUpdateDTO(999L, 10, 100.0);
-        assertThatThrownBy(() -> movementService.registerSet(dto))
+        assertThatThrownBy(() -> movementService.registerSet(dto, "user-1"))
                 .isInstanceOf(RuntimeException.class);
     }
 }

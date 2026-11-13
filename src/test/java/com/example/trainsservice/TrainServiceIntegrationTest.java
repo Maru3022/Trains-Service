@@ -38,6 +38,7 @@ public class TrainServiceIntegrationTest {
         testTrain.setName("Express Train");
         testTrain.setCategory("Express");
         testTrain.setDurationMinutes(120);
+        testTrain.setUserId("user-1");
     }
 
     @Test
@@ -50,7 +51,7 @@ public class TrainServiceIntegrationTest {
     @Test
     void testGetTrainById() {
         Train savedTrain = trainRepository.save(testTrain);
-        var result = trainService.getTrainById(savedTrain.getId());
+        var result = trainService.getTrainById(savedTrain.getId(), "user-1");
         assertThat(result).isPresent();
         assertThat(result.get().getName()).isEqualTo("Express Train");
     }
@@ -59,7 +60,7 @@ public class TrainServiceIntegrationTest {
     void testDeleteTrain() {
         Train savedTrain = trainRepository.save(testTrain);
         Long trainId = savedTrain.getId();
-        trainService.deleteTrain(trainId);
+        trainService.deleteTrain(trainId, "user-1");
         assertThat(trainRepository.existsById(trainId)).isFalse();
     }
 
@@ -70,9 +71,10 @@ public class TrainServiceIntegrationTest {
         train2.setName("Local Train");
         train2.setCategory("Local");
         train2.setDurationMinutes(180);
+        train2.setUserId("user-1");
         trainRepository.save(train2);
         
-        var trains = trainService.getAllTrains();
+        var trains = trainService.getAllTrains("user-1");
         assertThat(trains.size()).isGreaterThanOrEqualTo(2);
     }
 }

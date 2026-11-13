@@ -1,6 +1,7 @@
 package com.example.trainsservice.controller;
 
 import com.example.trainsservice.model.Train;
+import com.example.trainsservice.dto.TrainRequestDTO;
 import com.example.trainsservice.service.TrainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,23 +18,30 @@ public class TrainController {
     private final TrainService trainService;
 
     @GetMapping
-    public List<Train> getTrains(){
-        return trainService.getAllTrains();
+    public List<Train> getTrains(@RequestHeader("X-User-Id") String userId){
+        return trainService.getAllTrains(userId);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Train> getTrainById(
             @PathVariable Long id
+            , @RequestHeader("X-User-Id") String userId
     ){
-        return trainService.getTrainById(id)
+        return trainService.getTrainById(id, userId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public ResponseEntity<Train> createTrain(
-            @RequestBody Train train
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody TrainRequestDTO request
     ){
+        Train train = new Train();
+        train.setName(request.getName());
+        train.setCategory(request.getCategory());
+        train.setDurationMinutes(request.getDurationMinutes());
+        train.setUserId(userId);
         Train savedTrain = trainService.saveTrain(train);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
@@ -45,8 +53,9 @@ public class TrainController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTrain(
             @PathVariable Long id
+            , @RequestHeader("X-User-Id") String userId
     ){
-        trainService.deleteTrain(id);
+        trainService.deleteTrain(id, userId);
         return ResponseEntity.noContent().build();
     }
 }
