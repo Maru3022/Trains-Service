@@ -25,6 +25,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import org.mockito.ArgumentCaptor;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -79,6 +82,7 @@ public class TrainControllerTest {
         when(trainService.saveTrain(org.mockito.ArgumentMatchers.any(Train.class))).thenReturn(saved);
 
         mockMvc.perform(post("/api/v1/plans")
+                .header("X-User-Id", "user-1")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isCreated())
@@ -86,6 +90,27 @@ public class TrainControllerTest {
                     String location = result.getResponse().getHeader("Location");
                     if (location == null) throw new AssertionError("Location header missing");
                 });
+    }
+
+    @Test
+    void createTrain_ShouldIgnoreClientSuppliedOwnerAndId() throws Exception {
+        String json = "{\"id\":999,\"name\":\"Plan\",\"category\":\"strength\",\"durationMinutes\":45,\"userId\":\"victim\"}";
+        doAnswer(invocation -> {
+            Train train = invocation.getArgument(0);
+            train.setId(10L);
+            return train;
+        }).when(trainService).saveTrain(any(Train.class));
+
+        mockMvc.perform(post("/api/v1/plans")
+                        .header("X-User-Id", "attacker")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<Train> captor = ArgumentCaptor.forClass(Train.class);
+        verify(trainService).saveTrain(captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("attacker", captor.getValue().getUserId());
+        org.junit.jupiter.api.Assertions.assertNull(captor.getValue().getId());
     }
 
     @Test

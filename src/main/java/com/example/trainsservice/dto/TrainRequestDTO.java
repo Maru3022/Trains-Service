@@ -7,4 +7,5 @@ public class TrainRequestDTO {
 
     private String name;
     private String category;
+    private Integer durationMinutes;
 }
