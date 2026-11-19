@@ -36,6 +36,11 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
+            - name: INTERNAL_GATEWAY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fitflow-internal-secrets
+                  key: INTERNAL_GATEWAY_SECRET
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 configMapKeyRef:
