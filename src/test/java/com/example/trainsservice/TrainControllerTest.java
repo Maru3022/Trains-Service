@@ -98,6 +98,8 @@ public class TrainControllerTest {
         String json = "{\"id\":999,\"name\":\"Plan\",\"category\":\"strength\",\"durationMinutes\":45,\"userId\":\"victim\"}";
         doAnswer(invocation -> {
             Train train = invocation.getArgument(0);
+            org.junit.jupiter.api.Assertions.assertNull(train.getId());
+            org.junit.jupiter.api.Assertions.assertEquals("attacker", train.getUserId());
             train.setId(10L);
             return train;
         }).when(trainService).saveTrain(any(Train.class));
@@ -111,7 +113,7 @@ public class TrainControllerTest {
         ArgumentCaptor<Train> captor = ArgumentCaptor.forClass(Train.class);
         verify(trainService).saveTrain(captor.capture());
         org.junit.jupiter.api.Assertions.assertEquals("attacker", captor.getValue().getUserId());
-        org.junit.jupiter.api.Assertions.assertNull(captor.getValue().getId());
+        org.junit.jupiter.api.Assertions.assertEquals(10L, captor.getValue().getId());
     }
 
     @Test
