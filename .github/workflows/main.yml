@@ -40,7 +40,17 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
       - name: Verify application
-        run: ./mvnw -B -ntp clean verify
+        run: ./mvnw -B -ntp -Dspring.profiles.active=test clean verify
+      - name: Install kubectl
+        shell: bash
+        run: |
+          version=v1.30.2
+          base="https://dl.k8s.io/release/${version}/bin/linux/amd64"
+          curl --fail --silent --show-error --location --output kubectl "${base}/kubectl"
+          curl --fail --silent --show-error --location --output kubectl.sha256 "${base}/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          chmod +x kubectl
+          echo "$PWD" >> "$GITHUB_PATH"
       - name: Install kubeconform
         shell: bash
         run: |
@@ -94,7 +104,7 @@ jobs:
           echo "image=${image}@${digest}" >> "$GITHUB_OUTPUT"
   deploy-staging:
     name: Deploy staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STAGING_ENABLED == 'true'
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -107,6 +117,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: Install kubectl
+        shell: bash
+        run: |
+          version=v1.30.2
+          base="https://dl.k8s.io/release/${version}/bin/linux/amd64"
+          curl --fail --silent --show-error --location --output kubectl "${base}/kubectl"
+          curl --fail --silent --show-error --location --output kubectl.sha256 "${base}/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          chmod +x kubectl
+          echo "$PWD" >> "$GITHUB_PATH"
       - name: Configure Kubernetes
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_STAGING }}
@@ -156,6 +176,16 @@ jobs:
           }
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: Install kubectl
+        shell: bash
+        run: |
+          version=v1.30.2
+          base="https://dl.k8s.io/release/${version}/bin/linux/amd64"
+          curl --fail --silent --show-error --location --output kubectl "${base}/kubectl"
+          curl --fail --silent --show-error --location --output kubectl.sha256 "${base}/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          chmod +x kubectl
+          echo "$PWD" >> "$GITHUB_PATH"
       - name: Configure Kubernetes
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_PRODUCTION }}
